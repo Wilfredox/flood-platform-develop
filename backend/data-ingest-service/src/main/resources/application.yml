@@ -1,0 +1,17 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: data-ingest-service
+
+# --- Demo 阶段说明 ---
+# 正式环境将接入:
+#   - Kafka: sensor-raw-topic 用于数据流接入
+#   - InfluxDB: 时序数据持久化
+#   - Nacos: 服务注册与发现
+# Demo 使用内存存储 + REST 接口模拟
+
+logging:
+  level:
+    com.flood: DEBUG

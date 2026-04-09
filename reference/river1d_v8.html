@@ -1,0 +1,3512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>River1D · 一维河网建模系统</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --ink:#0d1117;--ink2:#1c2535;--ink3:#2d3f55;
+  --s0:#fff;--s1:#f5f7fa;--s2:#eef1f6;--bd:#dde3ed;--bd2:#c8d0e0;
+  --blue:#1a6cff;--blue-l:#e8f0ff;--blue-d:#1250cc;
+  --cyan:#00b4d8;--teal:#0a9396;--green:#00a878;--green-l:#e0f7f1;
+  --amber:#f4a261;--red:#e63946;--red-l:#fde8ea;--purple:#6c63ff;
+  --river:#1a6cff;--bank:#00a878;--section:#f4a261;--structure:#e63946;
+  --sel:#ffd600;
+  --panel:320px;--hdr:48px;--r:6px;--r2:10px;
+  --sh1:0 1px 3px rgba(13,17,23,.08);--sh2:0 4px 12px rgba(13,17,23,.1);--sh3:0 8px 28px rgba(13,17,23,.14);
+}
+body{font-family:'DM Sans',sans-serif;font-size:13px;color:var(--ink);overflow:hidden;height:100vh;display:flex;flex-direction:column}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:3px}
+
+/* HEADER */
+header{height:var(--hdr);display:flex;align-items:center;background:var(--ink);
+  border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0;z-index:400;}
+.hd-brand{display:flex;align-items:center;gap:9px;padding:0 16px;border-right:1px solid rgba(255,255,255,.08)}
+.hd-logo{width:28px;height:28px;border-radius:7px;flex-shrink:0;
+  background:linear-gradient(140deg,#00b4d8,#1a6cff);display:flex;align-items:center;justify-content:center;}
+.hd-logo svg{width:15px;height:15px;fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.hd-name{color:#fff;font-size:15px;font-weight:600;letter-spacing:-.3px}
+.hd-ver{color:rgba(255,255,255,.3);font-size:10px;font-family:'JetBrains Mono',monospace;margin-top:1px}
+.tb-sec{display:flex;align-items:center;gap:4px;padding:0 12px;border-right:1px solid rgba(255,255,255,.07)}
+.tb-sec:last-child{border-right:none;margin-left:auto}
+.tb-lbl{font-size:10px;color:rgba(255,255,255,.28);text-transform:uppercase;letter-spacing:.5px;margin-right:2px;white-space:nowrap}
+.hb{height:28px;padding:0 9px;border:none;border-radius:5px;cursor:pointer;
+  font-size:12px;font-weight:500;display:flex;align-items:center;gap:5px;
+  transition:all .15s;white-space:nowrap;font-family:'DM Sans',sans-serif;}
+.hb svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.hb-ghost{background:rgba(255,255,255,.06);color:rgba(255,255,255,.6)}
+.hb-ghost:hover{background:rgba(255,255,255,.12);color:#fff}
+.hb-teal{background:var(--teal);color:#fff}.hb-teal:hover{background:#077880}
+.hb-sep{width:1px;height:18px;background:rgba(255,255,255,.1)}
+/* draw tool btns */
+.dt{height:28px;padding:0 9px;border:none;border-radius:5px;cursor:pointer;
+  font-size:12px;font-weight:500;display:flex;align-items:center;gap:6px;
+  background:rgba(255,255,255,.05);color:rgba(255,255,255,.55);
+  transition:all .15s;font-family:'DM Sans',sans-serif;}
+.dt:hover{background:rgba(255,255,255,.11);color:rgba(255,255,255,.9)}
+.dt.active{color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.2)}
+.dt-pip{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dt[data-t=river].active{background:var(--river)}
+.dt[data-t=bank].active{background:var(--bank)}
+.dt[data-t=section].active{background:var(--section)}
+.dt[data-t=structure].active{background:var(--structure)}
+.dt[data-t=select].active{background:var(--purple)}
+
+/* WORKSPACE */
+.ws{flex:1;display:flex;overflow:hidden}
+/* LEFT NAV */
+.lsb{width:48px;background:var(--s0);border-right:1px solid var(--bd);
+  display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:2px;z-index:200;flex-shrink:0;}
+.sb-btn{width:36px;height:36px;border-radius:7px;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  background:transparent;color:var(--ink3);transition:all .15s;position:relative;}
+.sb-btn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.sb-btn:hover{background:var(--s2);color:var(--blue)}
+.sb-btn.active{background:var(--blue-l);color:var(--blue)}
+.sb-sep{width:24px;height:1px;background:var(--bd);margin:3px 0}
+.sb-tip{position:absolute;left:44px;top:50%;transform:translateY(-50%);
+  background:var(--ink);color:#fff;padding:4px 8px;border-radius:4px;
+  font-size:11px;font-weight:500;white-space:nowrap;
+  opacity:0;pointer-events:none;transition:opacity .12s;z-index:600;}
+.sb-btn:hover .sb-tip{opacity:1}
+/* MAP */
+.map-wrap{flex:1;position:relative;overflow:hidden}
+#map{width:100%;height:100%;background:#d4e3ec}
+/* draw hint */
+.draw-hint{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:500;
+  background:rgba(13,17,23,.87);backdrop-filter:blur(8px);color:rgba(255,255,255,.92);
+  padding:6px 16px 6px 12px;border-radius:20px;font-size:12px;font-weight:500;
+  border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:8px;
+  opacity:0;transition:opacity .2s;pointer-events:none;box-shadow:var(--sh2);}
+.draw-hint.show{opacity:1}
+.dh-dot{width:8px;height:8px;border-radius:50%;animation:dhpulse 1.2s infinite;flex-shrink:0}
+@keyframes dhpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+.dh-key{background:rgba(255,255,255,.15);border-radius:3px;padding:1px 5px;
+  font-family:'JetBrains Mono',monospace;font-size:10px;}
+/* snap ring */
+.snap-ring{width:16px;height:16px;border-radius:50%;border:2px solid var(--sel);
+  background:rgba(255,214,0,.15);position:absolute;transform:translate(-50%,-50%);
+  pointer-events:none;animation:sring .15s ease-out;z-index:800;}
+@keyframes sring{from{transform:translate(-50%,-50%) scale(1.8);opacity:0}to{transform:translate(-50%,-50%) scale(1);opacity:1}}
+/* vtx markers */
+.vtx-d{width:8px;height:8px;border-radius:50%;border:2px solid rgba(255,255,255,.9);
+  box-shadow:0 0 0 1px rgba(0,0,0,.35);background:#fff}
+.vtx-first{background:var(--sel)!important}
+/* basemap switcher */
+.bm-sw{position:absolute;left:12px;bottom:48px;z-index:500;display:flex;flex-direction:column;gap:4px;}
+.bm-b{padding:5px 10px;border-radius:5px;border:1px solid rgba(0,0,0,.15);
+  font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;
+  background:rgba(255,255,255,.92);backdrop-filter:blur(6px);color:var(--ink3);
+  box-shadow:var(--sh1);white-space:nowrap;}
+.bm-b.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+.bm-b:hover:not(.active){background:#fff;color:var(--blue)}
+/* FABs */
+.map-fabs{position:absolute;right:12px;bottom:48px;z-index:500;display:flex;flex-direction:column;gap:6px;}
+.fab{width:32px;height:32px;border-radius:7px;border:none;cursor:pointer;
+  background:var(--s0);box-shadow:var(--sh2);display:flex;align-items:center;justify-content:center;
+  color:var(--ink3);transition:all .15s;}
+.fab:hover{background:var(--blue);color:#fff}
+.fab svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+/* coord bar */
+.coord-bar{position:absolute;bottom:0;left:0;right:0;z-index:500;
+  background:rgba(13,17,23,.78);backdrop-filter:blur(6px);
+  padding:4px 14px;display:flex;align-items:center;gap:14px;
+  font-family:'JetBrains Mono',monospace;font-size:11px;}
+.cb-i{display:flex;gap:5px;align-items:center}
+.cb-l{color:rgba(255,255,255,.3)}.cb-v{color:rgba(255,255,255,.75)}
+.cb-s{color:rgba(255,255,255,.12);font-size:14px}
+.cb-crs{margin-left:auto;color:rgba(255,255,255,.35);font-size:10px}
+
+/* RIGHT PANEL */
+.rpanel{width:var(--panel);background:var(--s0);border-left:1px solid var(--bd);display:flex;flex-direction:column;z-index:200;flex-shrink:0;}
+.rp-tabs{display:flex;border-bottom:1px solid var(--bd);flex-shrink:0;background:var(--s0)}
+.rp-tab{flex:1;padding:10px 4px;text-align:center;font-size:11px;font-weight:600;
+  letter-spacing:.2px;cursor:pointer;color:var(--ink3);border-bottom:2px solid transparent;
+  transition:all .15s;display:flex;align-items:center;justify-content:center;gap:4px;}
+.rp-tab svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.rp-tab:hover{color:var(--blue);background:var(--blue-l)}
+.rp-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.rp-body{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+/* panel section */
+.ps{border-bottom:1px solid var(--bd)}
+.ps:last-child{border-bottom:none}
+.psh{padding:9px 13px;display:flex;align-items:center;justify-content:space-between;
+  cursor:pointer;user-select:none;transition:background .13s;background:var(--s1);
+  font-size:10.5px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;}
+.psh:hover{background:var(--s2)}
+.psh-l{display:flex;align-items:center;gap:7px}
+.psh-ico{width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.psh-ico svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.psh-arr{transition:transform .18s;font-size:9px;opacity:.5}
+.psh.open .psh-arr{transform:rotate(180deg)}
+.psb{padding:13px;display:none}.psb.open{display:block}
+/* form */
+.fg{margin-bottom:11px}.fg:last-child{margin-bottom:0}
+.fg label{display:block;font-size:11px;font-weight:600;color:var(--ink3);margin-bottom:4px}
+.fg-row{display:flex;gap:8px}.fg-row .fg{flex:1}
+.fc{width:100%;padding:6px 10px;border:1px solid var(--bd2);border-radius:var(--r);
+  font-size:12.5px;font-family:'DM Sans',sans-serif;background:var(--s0);color:var(--ink);transition:all .15s;}
+.fc:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-l)}
+.fc::placeholder{color:#b0b8c8}
+.fc:read-only{background:var(--s1);color:var(--ink3);cursor:default}
+textarea.fc{min-height:56px;resize:vertical;line-height:1.5}
+select.fc{cursor:pointer}
+/* layer list */
+.layer-list{list-style:none}
+.li{display:flex;align-items:center;padding:8px 13px;gap:9px;
+  border-bottom:1px solid var(--s2);transition:background .13s;}
+.li:last-child{border-bottom:none}
+.li:hover{background:var(--s1)}.li:hover .la{opacity:1}
+.li-cb{width:14px;height:14px;cursor:pointer;accent-color:var(--blue);flex-shrink:0}
+.li-sw{width:4px;border-radius:2px;align-self:stretch;flex-shrink:0;min-height:28px}
+.li-info{flex:1;min-width:0}
+.li-name{font-size:12px;font-weight:600;color:var(--ink)}
+.li-meta{font-size:11px;color:#8898b0;margin-top:1px}
+.la{display:flex;gap:3px;opacity:0;transition:opacity .13s;flex-shrink:0}
+.la-btn{width:22px;height:22px;border:none;border-radius:4px;cursor:pointer;
+  background:var(--s2);display:flex;align-items:center;justify-content:center;
+  transition:all .13s;color:var(--ink3);}
+.la-btn:hover{background:var(--blue-l);color:var(--blue)}
+.la-btn.del:hover{background:var(--red-l);color:var(--red)}
+.la-btn svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+/* stats */
+.stats-row{display:flex;gap:7px;padding:12px 13px}
+.sc{flex:1;padding:10px 8px;background:var(--s1);border-radius:8px;text-align:center;border:1px solid var(--bd);transition:all .15s}
+.sc:hover{border-color:var(--blue);transform:translateY(-1px);box-shadow:var(--sh1)}
+.sc-val{font-size:20px;font-weight:700;color:var(--blue);line-height:1;font-variant-numeric:tabular-nums}
+.sc-lbl{font-size:10px;color:#8898b0;margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+/* action buttons */
+.ag{padding:10px 13px;display:flex;gap:6px;flex-wrap:wrap}
+.ab{flex:1;min-width:100px;padding:6px 10px;border:1px solid var(--bd2);border-radius:var(--r);
+  background:var(--s0);cursor:pointer;font-size:12px;font-weight:500;
+  font-family:'DM Sans',sans-serif;color:var(--ink);transition:all .15s;
+  display:flex;align-items:center;justify-content:center;gap:5px;}
+.ab:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-l)}
+.ab svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ab-blue{background:var(--blue);color:#fff;border-color:var(--blue)}
+.ab-blue:hover{background:var(--blue-d);border-color:var(--blue-d);color:#fff}
+.ab-teal{background:var(--teal);color:#fff;border-color:var(--teal)}
+.ab-teal:hover{background:#077880;border-color:#077880;color:#fff}
+.ab-full{width:100%;flex:unset;min-width:unset}
+.ab-del{background:var(--red-l);color:var(--red);border-color:transparent}
+.ab-del:hover{background:var(--red);color:#fff}
+/* info boxes */
+.ibox{margin:0 13px 11px;padding:9px 11px;border-radius:var(--r);font-size:11.5px;color:var(--ink3);line-height:1.65;}
+.ibox-blue{background:var(--blue-l);border-left:3px solid var(--blue)}
+.ibox-amber{background:#fff0e0;border-left:3px solid var(--amber)}
+.ibox-green{background:var(--green-l);border-left:3px solid var(--teal)}
+/* radio opts */
+.ro-row{display:flex;gap:5px;flex-wrap:wrap}
+.ro{padding:5px 10px;border:1px solid var(--bd2);border-radius:20px;
+  font-size:11.5px;font-weight:500;cursor:pointer;transition:all .13s;user-select:none;}
+.ro:hover{border-color:var(--blue);color:var(--blue)}
+.ro.sel{background:var(--blue);color:#fff;border-color:var(--blue)}
+/* progress */
+.prog-wrap{padding:0 13px 13px}
+.prog-top{display:flex;justify-content:space-between;font-size:11px;color:#8898b0;margin-bottom:5px;font-weight:600}
+.prog-track{height:5px;background:var(--s2);border-radius:3px;overflow:hidden}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--cyan));border-radius:3px;transition:width .35s;width:0%}
+.prog-st{margin-top:9px;display:flex;align-items:center;gap:6px;font-size:11.5px;color:#8898b0}
+.prog-dot{width:6px;height:6px;border-radius:50%;background:var(--bd2);flex-shrink:0}
+.prog-dot.run{background:var(--teal);animation:blink 1.4s infinite}
+.prog-dot.done{background:var(--green)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+/* log */
+.log-box{margin:0 13px 13px;background:#0d1117;border-radius:var(--r);
+  padding:9px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;
+  max-height:100px;overflow-y:auto;line-height:1.75;border:1px solid rgba(255,255,255,.05);}
+.ll{display:flex;gap:8px}.lt{color:#3d5166;flex-shrink:0}
+.ls{color:#a8c7fa}.lw{color:#f4a261}.le{color:#f07070}.lok{color:#7ec8a0}
+/* modal */
+.modal-bg{position:fixed;inset:0;background:rgba(13,17,23,.55);backdrop-filter:blur(4px);
+  z-index:8000;display:none;align-items:center;justify-content:center;}
+.modal-bg.show{display:flex}
+.modal{background:var(--s0);border-radius:var(--r2);width:500px;max-width:92vw;max-height:88vh;
+  display:flex;flex-direction:column;box-shadow:var(--sh3);
+  animation:mIn .22s cubic-bezier(.4,0,.2,1);border:1px solid var(--bd);}
+@keyframes mIn{from{opacity:0;transform:scale(.96) translateY(10px)}}
+.modal-hd{padding:16px 18px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.modal-title{font-size:14px;font-weight:700}
+.modal-cls{width:26px;height:26px;border:none;background:var(--s2);border-radius:5px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:14px;color:var(--ink3);transition:all .13s;}
+.modal-cls:hover{background:var(--red-l);color:var(--red)}
+.modal-body{padding:18px;overflow-y:auto;flex:1}
+.modal-ft{padding:12px 18px;border-top:1px solid var(--bd);display:flex;gap:7px;justify-content:flex-end;background:var(--s1)}
+.exp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.exp-btn{padding:13px 10px;border:1px solid var(--bd);border-radius:8px;
+  background:var(--s0);cursor:pointer;transition:all .15s;
+  display:flex;flex-direction:column;align-items:center;gap:7px;font-family:'DM Sans',sans-serif;}
+.exp-btn:hover{border-color:var(--blue);background:var(--blue-l);transform:translateY(-2px);box-shadow:var(--sh1)}
+.exp-btn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.exp-btn span{font-size:12px;font-weight:700;color:var(--ink)}
+.exp-btn small{font-size:10px;color:#8898b0}
+.dlbl{display:flex;align-items:center;gap:8px;padding:8px 0 6px;
+  color:#8898b0;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+.dlbl::before,.dlbl::after{content:'';flex:1;height:1px;background:var(--bd)}
+/* notify */
+.notif{position:fixed;bottom:26px;right:22px;z-index:9999;
+  background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;box-shadow:var(--sh3);
+  display:flex;align-items:center;gap:9px;
+  transform:translateY(72px);opacity:0;transition:all .25s cubic-bezier(.4,0,.2,1);
+  font-size:13px;font-weight:500;max-width:310px;border-left:3px solid transparent;}
+.notif.show{transform:translateY(0);opacity:1}
+.notif.ok{border-left-color:var(--green)}.notif.err{border-left-color:var(--red)}
+.notif.warn{border-left-color:var(--amber)}.notif.info{border-left-color:var(--blue)}
+.notif-ic{width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0}
+.notif.ok .notif-ic{background:var(--green)}.notif.err .notif-ic{background:var(--red)}
+.notif.warn .notif-ic{background:var(--amber)}.notif.info .notif-ic{background:var(--blue)}
+/* props panel */
+.props-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:32px;color:#8898b0;text-align:center}
+.props-empty svg{opacity:.25}
+.sel-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600;margin-left:6px}
+/* layer settings panel */
+.ls-modal{
+  position:fixed;inset:0;background:rgba(13,17,23,.45);backdrop-filter:blur(3px);
+  z-index:7000;display:none;align-items:center;justify-content:center;
+}
+.ls-modal.show{display:flex}
+.ls-box{
+  background:var(--s0);border-radius:var(--r2);width:300px;
+  box-shadow:var(--sh3);border:1px solid var(--bd);
+  animation:mIn .18s cubic-bezier(.4,0,.2,1);
+}
+.ls-hd{padding:13px 16px;border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;gap:8px;}
+.ls-hd-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.ls-hd-title{font-size:13px;font-weight:700;flex:1}
+.ls-cls{width:24px;height:24px;border:none;background:var(--s2);border-radius:4px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:13px;color:var(--ink3);transition:all .13s;}
+.ls-cls:hover{background:var(--red-l);color:var(--red)}
+.ls-body{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.ls-row{display:flex;align-items:center;gap:10px}
+.ls-lbl{font-size:12px;font-weight:500;color:var(--ink3);flex:1}
+.ls-val{font-size:12px;color:var(--ink)}
+.ls-clr{width:32px;height:26px;border:1px solid var(--bd2);border-radius:5px;
+  cursor:pointer;padding:2px;background:none;}
+.ls-range{flex:1;accent-color:var(--blue)}
+.ls-ck{width:15px;height:15px;cursor:pointer;accent-color:var(--blue)}
+.ls-ft{padding:10px 16px;border-top:1px solid var(--bd);display:flex;gap:7px;justify-content:flex-end}
+
+/* label tooltip on map */
+.river-label{
+  background:transparent;border:none;box-shadow:none;
+  font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;
+  color:var(--ink);white-space:nowrap;pointer-events:none;
+}
+
+/* leaflet */
+.leaflet-control-zoom{display:none}
+.leaflet-control-attribution{font-size:9px!important;padding:1px 5px!important;background:rgba(255,255,255,.7)!important}
+.leaflet-popup-content-wrapper{border-radius:8px!important;box-shadow:var(--sh3)!important;padding:0!important}
+.leaflet-popup-content{margin:0!important;font-family:'DM Sans',sans-serif}
+.leaflet-popup-close-button{top:10px!important;right:10px!important;width:20px!important;height:20px!important;font-size:16px!important}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hd-brand">
+    <div class="hd-logo"><svg viewBox="0 0 15 15"><path d="M2 11C4 8 6 6 7.5 8C9 10 11 7 13 5"/><path d="M2 13C4 11 6 10 7.5 11C9 12 11 11 13 10" opacity=".45"/></svg></div>
+    <div><div class="hd-name">River1D</div><div class="hd-ver">v7.0 · CGCS2000</div></div>
+  </div>
+
+  <div class="tb-sec">
+    <span class="tb-lbl">工具</span>
+    <button class="dt" id="dt-select" data-t="select" onclick="setTool('select')" title="选择 [S]">
+      <svg style="width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2;flex-shrink:0" viewBox="0 0 12 12"><path d="M2 2L5 10.5L6.5 6.5L10.5 5Z" stroke-linejoin="round"/></svg>选择
+    </button>
+  </div>
+
+  <div class="tb-sec">
+    <span class="tb-lbl">绘制</span>
+    <button class="dt" id="dt-river" data-t="river" onclick="setTool('river')" title="河道 [R]">
+      <span class="dt-pip" style="background:var(--river)"></span>河道
+    </button>
+    <button class="dt" id="dt-bank" data-t="bank" onclick="setTool('bank')" title="岸线 [B]">
+      <span class="dt-pip" style="background:var(--bank)"></span>岸线
+    </button>
+    <button class="dt" id="dt-section" data-t="section" onclick="setTool('section')" title="横断面 [X]">
+      <span class="dt-pip" style="background:var(--section)"></span>断面
+    </button>
+    <button class="dt" id="dt-structure" data-t="structure" onclick="setTool('structure')" title="建筑物 [W]">
+      <span class="dt-pip" style="background:var(--structure)"></span>建筑物
+    </button>
+  </div>
+
+  <div class="tb-sec">
+    <button class="hb hb-ghost" onclick="undoLast()">
+      <svg viewBox="0 0 12 12"><path d="M2 6L5 3M2 6L5 9M2 6H8C10.2 6 12 7.8 12 10"/></svg>撤销
+    </button>
+    <div class="hb-sep"></div>
+    <button class="hb hb-ghost" id="btn-snap" onclick="toggleSnap()">
+      <svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="2.5"/><path d="M6 1V3.5M6 8.5V11M1 6H3.5M8.5 6H11"/></svg>捕捉
+    </button>
+    <button class="hb hb-ghost" onclick="cancelDraw()" title="ESC">
+      <svg viewBox="0 0 12 12"><path d="M3 3L9 9M9 3L3 9"/></svg>取消
+    </button>
+  </div>
+
+  <div class="tb-sec">
+    <button class="hb hb-ghost" onclick="fitAll()">
+      <svg viewBox="0 0 12 12"><rect x="1" y="1" width="4" height="4" rx=".5"/><rect x="7" y="1" width="4" height="4" rx=".5"/><rect x="1" y="7" width="4" height="4" rx=".5"/><rect x="7" y="7" width="4" height="4" rx=".5"/></svg>全图
+    </button>
+    <button class="hb hb-ghost" onclick="autoGenNodes()">
+      <svg viewBox="0 0 12 12"><circle cx="6" cy="3" r="1.5"/><circle cx="2" cy="9" r="1.5"/><circle cx="10" cy="9" r="1.5"/><path d="M5.1 4.5L2.5 7.5M6.9 4.5L9.5 7.5"/></svg>生成节点
+    </button>
+    <button class="hb hb-ghost" onclick="checkTopo()">
+      <svg viewBox="0 0 12 12"><path d="M2 7L4.5 9.5L10 4"/></svg>拓扑
+    </button>
+  </div>
+
+  <div class="tb-sec">
+    <button class="hb hb-ghost" onclick="newProject()" title="新建方案 (Ctrl+N)">
+      <svg viewBox="0 0 12 12"><path d="M7 1H3C2.4 1 2 1.4 2 2V10C2 10.6 2.4 11 3 11H9C9.6 11 10 10.6 10 10V4L7 1Z"/><path d="M7 1V4H10" opacity=".6"/></svg>新建
+    </button>
+    <button class="hb hb-ghost" onclick="openProject()" title="打开方案 (Ctrl+O)">
+      <svg viewBox="0 0 12 12"><path d="M1 4V10C1 10.6 1.4 11 2 11H10C10.6 11 10 10 10 9.5V5C10 4.4 9.6 4 9 4H5.5L4.5 2.5C4.2 2 3.8 2 3.5 2H2C1.4 2 1 2.4 1 3V4Z"/></svg>打开
+    </button>
+    <button class="hb hb-ghost" onclick="saveProject()" title="保存方案 (Ctrl+S)" id="btn-save">
+      <svg viewBox="0 0 12 12"><path d="M2 1H8L11 4V11H2V1Z"/><path d="M4 1V4H8V1" opacity=".6"/><rect x="3" y="7" width="6" height="4" rx=".5" opacity=".6"/></svg>保存
+    </button>
+    <button class="hb hb-ghost" onclick="saveProjectAs()" title="另存为">
+      <svg viewBox="0 0 12 12"><path d="M2 1H8L11 4V11H2V1Z"/><path d="M4 1V4H8V1" opacity=".6"/><rect x="3" y="7" width="6" height="4" rx=".5" opacity=".6"/><path d="M9 7L11 9L9 11" stroke-width="1.5" opacity=".8"/></svg>另存
+    </button>
+    <div class="hb-sep"></div>
+    <button class="hb hb-teal" onclick="showModal('modal-export')">
+      <svg viewBox="0 0 12 12"><path d="M6 8V2M3.5 5.5L6 8L8.5 5.5"/><path d="M2 10H10"/></svg>导出
+    </button>
+    <button class="hb" onclick="openXsEditor()" style="background:rgba(6,182,212,.15);color:#06b6d4;border:1px solid rgba(6,182,212,.3)" title="断面编辑器">
+      <svg viewBox="0 0 12 12" style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M1 9L3 5 5 7 8 2 11 5"/><path d="M1 9.5H11"/></svg>断面编辑器
+    </button>
+  </div>
+</header>
+
+<div class="ws">
+  <nav class="lsb">
+    <button class="sb-btn active" id="sb-layers" onclick="setSB('layers')">
+      <svg viewBox="0 0 18 18"><rect x="2" y="2" width="14" height="3.5" rx="1"/><rect x="2" y="7.5" width="14" height="3.5" rx="1"/><rect x="2" y="13" width="14" height="3.5" rx="1"/></svg>
+      <span class="sb-tip">图层管理</span>
+    </button>
+    <button class="sb-btn" id="sb-project" onclick="setSB('project')">
+      <svg viewBox="0 0 18 18"><path d="M4 2H11L15 6V16H4Z"/><path d="M11 2V6H15"/><path d="M7 10H12M7 13H10"/></svg>
+      <span class="sb-tip">项目信息</span>
+    </button>
+    <div class="sb-sep"></div>
+    <button class="sb-btn" id="sb-params" onclick="setSB('params')">
+      <svg viewBox="0 0 18 18"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="13" r="2"/><circle cx="14" cy="13" r="2"/><path d="M8 6L4.5 11M10 6L13.5 11M7 13H11"/></svg>
+      <span class="sb-tip">参数设置</span>
+    </button>
+    <button class="sb-btn" id="sb-compute" onclick="setSB('compute')">
+      <svg viewBox="0 0 18 18"><rect x="2" y="4" width="14" height="10" rx="1.5"/><path d="M6 8V10M9 7V11M12 8V10"/></svg>
+      <span class="sb-tip">模型计算</span>
+    </button>
+  </nav>
+
+  <div class="map-wrap">
+    <div id="map"></div>
+
+    <div class="draw-hint" id="draw-hint">
+      <span class="dh-dot" id="dh-dot" style="background:#fff"></span>
+      <span id="dh-text">就绪</span>
+      &nbsp;·&nbsp;<kbd class="dh-key">双击</kbd>结束&nbsp;·&nbsp;<kbd class="dh-key">ESC</kbd>取消
+    </div>
+
+    <div class="bm-sw">
+      <button class="bm-b active" id="bm-0" onclick="setBM(0)">🗺 天地图矢量</button>
+      <button class="bm-b" id="bm-1" onclick="setBM(1)">🛰 天地图影像</button>
+      <button class="bm-b" id="bm-2" onclick="setBM(2)">🌍 谷歌影像</button>
+      <button class="bm-b" id="bm-3" onclick="setBM(3)">📋 OpenStreetMap</button>
+    </div>
+
+    <div class="map-fabs">
+      <button class="fab" onclick="map.zoomIn()"><svg viewBox="0 0 14 14"><path d="M7 3V11M3 7H11"/></svg></button>
+      <button class="fab" onclick="map.zoomOut()"><svg viewBox="0 0 14 14"><path d="M3 7H11"/></svg></button>
+      <button class="fab" onclick="locateMe()"><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="2.5"/><path d="M7 1V4M7 10V13M1 7H4M10 7H13"/></svg></button>
+    </div>
+
+    <div class="coord-bar">
+      <div class="cb-i"><span class="cb-l">X(东)</span><span class="cb-v" id="cb-x">—</span></div>
+      <span class="cb-s">|</span>
+      <div class="cb-i"><span class="cb-l">Y(北)</span><span class="cb-v" id="cb-y">—</span></div>
+      <span class="cb-s">|</span>
+      <div class="cb-i"><span class="cb-l">WGS84</span><span class="cb-v" id="cb-wgs">—</span></div>
+      <span class="cb-s">|</span>
+      <div class="cb-i"><span class="cb-l">Z</span><span class="cb-v" id="cb-z">—</span></div>
+      <span class="cb-crs">CGCS2000 / GK 3°带</span>
+    </div>
+  </div>
+
+  <div class="rpanel">
+    <div class="rp-tabs">
+      <div class="rp-tab active" id="rt-build" onclick="switchRTab('build')">
+        <svg viewBox="0 0 14 14"><path d="M2 12L5 8 7.5 9.5 12 4"/><path d="M2 2V13H13"/></svg>建模
+      </div>
+      <div class="rp-tab" id="rt-props" onclick="switchRTab('props')">
+        <svg viewBox="0 0 14 14"><rect x="2" y="2" width="10" height="10" rx="1.5"/><path d="M5 6H9M5 8.5H7.5"/></svg>属性
+      </div>
+      <div class="rp-tab" id="rt-params" onclick="switchRTab('params')">
+        <svg viewBox="0 0 14 14"><circle cx="7" cy="4" r="1.5"/><circle cx="3.5" cy="10" r="1.5"/><circle cx="10.5" cy="10" r="1.5"/><path d="M2 4H5.5M8.5 4H12M5 10H8"/></svg>参数
+      </div>
+      <div class="rp-tab" id="rt-compute" onclick="switchRTab('compute')">
+        <svg viewBox="0 0 14 14"><path d="M3 2L10 7 3 12Z" fill="currentColor" stroke="none"/></svg>计算
+      </div>
+    </div>
+
+    <!-- TAB: 建模 -->
+    <div class="rp-body" id="tab-build">
+      <div class="stats-row">
+        <div class="sc"><div class="sc-val" id="sv-r">0</div><div class="sc-lbl">河道</div></div>
+        <div class="sc"><div class="sc-val" id="sv-reach">0</div><div class="sc-lbl">河段</div></div>
+        <div class="sc"><div class="sc-val" id="sv-s">0</div><div class="sc-lbl">断面</div></div>
+        <div class="sc"><div class="sc-val" id="sv-n">0</div><div class="sc-lbl">节点</div></div>
+      </div>
+      <div class="ps">
+        <div class="psh open" onclick="togglePS(this)">
+          <div class="psh-l"><div class="psh-ico" style="background:#e8f0ff;color:var(--blue)"><svg viewBox="0 0 11 11"><rect x="1" y="1" width="9" height="2.5" rx=".5"/><rect x="1" y="5" width="9" height="2.5" rx=".5"/></svg></div>图层管理</div>
+          <span class="psh-arr">▾</span>
+        </div>
+        <div class="psb open">
+          <ul class="layer-list">
+            <li class="li">
+              <input type="checkbox" class="li-cb" checked onchange="toggleLG('river',this.checked)">
+              <div class="li-sw" data-layer="river" style="background:var(--river)"></div>
+              <div class="li-info"><div class="li-name">河道中心线</div><div class="li-meta" id="lm-r">0 条河道 · 0 个河段</div></div>
+              <div class="la">
+                <button class="la-btn" onclick="setTool('river')" title="绘制"><svg viewBox="0 0 11 11"><path d="M2 9L7 4M8 3L9 5L7 4"/></svg></button>
+                <button class="la-btn" onclick="openLS('river')" title="样式设置"><svg viewBox="0 0 11 11"><path d="M5.5 1.5a4 4 0 100 8 4 4 0 000-8ZM5.5 3.5v2l1.5 1" stroke="currentColor" fill="none" stroke-width="1.3" stroke-linecap="round"/><circle cx="5.5" cy="5.5" r="1.2" fill="currentColor"/></svg></button>
+                <button class="la-btn del" onclick="clearLG('river')" title="清空"><svg viewBox="0 0 11 11"><path d="M3 3L8 8M8 3L3 8"/></svg></button>
+              </div>
+            </li>
+            <li class="li">
+              <input type="checkbox" class="li-cb" checked onchange="toggleLG('bank',this.checked)">
+              <div class="li-sw" data-layer="bank" style="background:var(--bank)"></div>
+              <div class="li-info"><div class="li-name">岸线（堤防）</div><div class="li-meta" id="lm-b">0 条 · 多节点折线</div></div>
+              <div class="la">
+                <button class="la-btn" onclick="setTool('bank')" title="绘制"><svg viewBox="0 0 11 11"><path d="M2 9L7 4M8 3L9 5L7 4"/></svg></button>
+                <button class="la-btn" onclick="openLS('bank')" title="样式设置"><svg viewBox="0 0 11 11"><circle cx="5.5" cy="5.5" r="1.2" fill="currentColor"/><path d="M5.5 1.5a4 4 0 100 8 4 4 0 000-8Z" stroke="currentColor" fill="none" stroke-width="1.3"/></svg></button>
+                <button class="la-btn del" onclick="clearLG('bank')" title="清空"><svg viewBox="0 0 11 11"><path d="M3 3L8 8M8 3L3 8"/></svg></button>
+              </div>
+            </li>
+            <li class="li">
+              <input type="checkbox" class="li-cb" checked onchange="toggleLG('section',this.checked)">
+              <div class="li-sw" data-layer="section" style="background:var(--section)"></div>
+              <div class="li-info"><div class="li-name">横断面</div><div class="li-meta" id="lm-s">0 个 · 单线段，双击结束</div></div>
+              <div class="la">
+                <button class="la-btn" onclick="setTool('section')" title="绘制"><svg viewBox="0 0 11 11"><path d="M2 9L7 4M8 3L9 5L7 4"/></svg></button>
+                <button class="la-btn" onclick="openLS('section')" title="样式设置"><svg viewBox="0 0 11 11"><circle cx="5.5" cy="5.5" r="1.2" fill="currentColor"/><path d="M5.5 1.5a4 4 0 100 8 4 4 0 000-8Z" stroke="currentColor" fill="none" stroke-width="1.3"/></svg></button>
+                <button class="la-btn del" onclick="clearLG('section')" title="清空"><svg viewBox="0 0 11 11"><path d="M3 3L8 8M8 3L3 8"/></svg></button>
+              </div>
+            </li>
+            <li class="li">
+              <input type="checkbox" class="li-cb" checked onchange="toggleLG('structure',this.checked)">
+              <div class="li-sw" data-layer="structure" style="background:var(--structure)"></div>
+              <div class="li-info"><div class="li-name">水工建筑物</div><div class="li-meta" id="lm-st">0 个 · 单线段，双击结束</div></div>
+              <div class="la">
+                <button class="la-btn" onclick="setTool('structure')" title="绘制"><svg viewBox="0 0 11 11"><path d="M2 9L7 4M8 3L9 5L7 4"/></svg></button>
+                <button class="la-btn" onclick="openLS('structure')" title="样式设置"><svg viewBox="0 0 11 11"><circle cx="5.5" cy="5.5" r="1.2" fill="currentColor"/><path d="M5.5 1.5a4 4 0 100 8 4 4 0 000-8Z" stroke="currentColor" fill="none" stroke-width="1.3"/></svg></button>
+                <button class="la-btn del" onclick="clearLG('structure')" title="清空"><svg viewBox="0 0 11 11"><path d="M3 3L8 8M8 3L3 8"/></svg></button>
+              </div>
+            </li>
+            <li class="li">
+              <input type="checkbox" class="li-cb" checked onchange="toggleLG('nodes',this.checked)">
+              <div class="li-sw" data-layer="nodes" style="background:var(--purple)"></div>
+              <div class="li-info"><div class="li-name">拓扑节点</div><div class="li-meta" id="lm-n">0 个 · 河道首末端点</div></div>
+              <div class="la">
+                <button class="la-btn" onclick="openLS('nodes')" title="样式设置"><svg viewBox="0 0 11 11"><circle cx="5.5" cy="5.5" r="1.2" fill="currentColor"/><path d="M5.5 1.5a4 4 0 100 8 4 4 0 000-8Z" stroke="currentColor" fill="none" stroke-width="1.3"/></svg></button>
+                <button class="la-btn del" onclick="clearLG('nodes')" title="清空"><svg viewBox="0 0 11 11"><path d="M3 3L8 8M8 3L3 8"/></svg></button>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="ps">
+        <div class="psh" onclick="togglePS(this)">
+          <div class="psh-l"><div class="psh-ico" style="background:#e0f7f1;color:var(--teal)"><svg viewBox="0 0 11 11"><circle cx="5.5" cy="3" r="1.5"/><circle cx="2" cy="8.5" r="1.5"/><circle cx="9" cy="8.5" r="1.5"/><path d="M4.7 4.5L2.5 7M6.3 4.5L8.5 7"/></svg></div>拓扑处理</div>
+          <span class="psh-arr">▾</span>
+        </div>
+        <div class="psb">
+          <div class="fg"><label>节点捕捉容差 (m)</label><input type="number" class="fc" id="topo-tol" value="1.0" min="0.01" step="0.5"></div>
+          <div class="ag" style="padding:0;flex-direction:column;gap:6px">
+            <button class="ab ab-blue ab-full" onclick="autoGenNodes()">
+              <svg viewBox="0 0 12 12"><path d="M2 6H10M7.5 3L10 6L7.5 9"/></svg>自动生成节点
+            </button>
+            <div style="display:flex;gap:6px">
+              <button class="ab" style="flex:1" onclick="checkTopo()"><svg viewBox="0 0 12 12"><path d="M2 7L4.5 9.5L10 4"/></svg>拓扑检查</button>
+              <button class="ab" style="flex:1" onclick="showTopoRpt()"><svg viewBox="0 0 12 12"><rect x="2" y="1" width="8" height="10" rx="1"/><path d="M4 5H8M4 7H6"/></svg>报告</button>
+            </div>
+            <button class="ab ab-teal ab-full" style="margin-top:6px" onclick="buildTopology()">
+              <svg viewBox="0 0 12 12" style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M2 10H10M2 6H8M2 2H6"/><path d="M9 4L11 6L9 8" opacity=".7"/></svg>生成拓扑关系（断面里程/归属）
+            </button>
+          </div>
+          <div id="topo-result" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: 属性 -->
+    <div class="rp-body" id="tab-props" style="display:none">
+      <div class="props-empty" id="props-empty">
+        <svg width="52" height="52" viewBox="0 0 52 52" fill="none"><path d="M10 6H32L44 18V46H10Z" stroke="#8898b0" stroke-width="2" stroke-linejoin="round"/><path d="M32 6V18H44" stroke="#8898b0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 28H34M18 34H28M18 22H26" stroke="#8898b0" stroke-width="2" stroke-linecap="round"/></svg>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--ink3);margin-bottom:5px">未选中任何对象</div>
+          <div style="font-size:12px;line-height:1.7;color:#8898b0">切换到<b>选择工具</b><br>单击地图要素查看属性</div>
+        </div>
+        <button class="ab ab-blue" style="margin-top:4px" onclick="setTool('select')">
+          <svg viewBox="0 0 12 12" style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2"><path d="M2 2L5 10.5L6.5 6.5L10.5 5Z" stroke-linejoin="round"/></svg>启用选择工具
+        </button>
+      </div>
+      <div id="props-content" style="display:none;flex-direction:column"></div>
+    </div>
+
+    <!-- TAB: 参数 -->
+    <div class="rp-body" id="tab-params" style="display:none">
+      <div class="ps">
+        <div class="psh open" onclick="togglePS(this)">
+          <div class="psh-l"><div class="psh-ico" style="background:var(--blue-l);color:var(--blue)"><svg viewBox="0 0 11 11"><path d="M5.5 1C3.2 1 1 3.2 1 5.5 1 7.8 3.2 10 5.5 10"/><path d="M8 2L8 5L11 5"/></svg></div>项目信息</div>
+          <span class="psh-arr">▾</span>
+        </div>
+        <div class="psb open">
+          <div class="fg"><label>项目名称</label><input type="text" class="fc" id="p-name" placeholder="请输入项目名称"></div>
+          <div class="fg"><label>投影坐标系</label>
+            <select class="fc" id="p-crs">
+              <option value="CGCS2000_3TM_108">CGCS2000 3°带 / 108°E</option>
+              <option value="CGCS2000_3TM_111">CGCS2000 3°带 / 111°E</option>
+              <option value="CGCS2000_3TM_114">CGCS2000 3°带 / 114°E</option>
+              <option value="CGCS2000_3TM_117">CGCS2000 3°带 / 117°E</option>
+              <option value="CGCS2000_3TM_120" selected>CGCS2000 3°带 / 120°E</option>
+              <option value="CGCS2000_3TM_123">CGCS2000 3°带 / 123°E</option>
+              <option value="GEO">CGCS2000 地理坐标 (°)</option>
+            </select>
+          </div>
+          <div class="fg"><label>区域描述</label><textarea class="fc" id="p-desc" placeholder="流域名称、地理位置、河道特征…"></textarea></div>
+          <div class="ag" style="padding:4px 0 0"><button class="ab ab-blue ab-full" onclick="saveProj()">保存项目信息</button></div>
+        </div>
+      </div>
+      <div class="ps">
+        <div class="psh open" onclick="togglePS(this)">
+          <div class="psh-l"><div class="psh-ico" style="background:#fff0e0;color:#d97d45"><svg viewBox="0 0 11 11"><path d="M1 3H10M1 6H8M1 9H5"/></svg></div>糙率参数</div>
+          <span class="psh-arr">▾</span>
+        </div>
+        <div class="psb open">
+          <div class="ibox ibox-blue">Manning 糙率 n：天然河道 0.025–0.045，人工渠 0.012–0.025</div>
+          <div class="fg-row">
+            <div class="fg"><label>主槽 n</label><input type="number" class="fc" id="n-main" value="0.030" step="0.001" min="0.005" max="0.2"></div>
+            <div class="fg"><label>左滩 n</label><input type="number" class="fc" id="n-left" value="0.040" step="0.001"></div>
+            <div class="fg"><label>右滩 n</label><input type="number" class="fc" id="n-right" value="0.040" step="0.001"></div>
+          </div>
+        </div>
+      </div>
+      <div class="ps">
+        <div class="psh open" onclick="togglePS(this)">
+          <div class="psh-l"><div class="psh-ico" style="background:var(--green-l);color:var(--teal)"><svg viewBox="0 0 11 11"><path d="M1 8C2.5 5 4 4 5.5 5.5 7 7 8.5 4 10 2"/><path d="M1 9.5H10"/></svg></div>边界条件</div>
+          <span class="psh-arr">▾</span>
+        </div>
+        <div class="psb open">
+          <div class="fg"><label>上游边界</label>
+            <select class="fc" id="bc-up"><option>流量过程线 Q(t)</option><option>水位过程线 Z(t)</option><option>恒定流量</option></select>
+          </div>
+          <div class="fg-row">
+            <div class="fg"><label>峰值流量 (m³/s)</label><input type="number" class="fc" id="bc-q" value="1000"></div>
+            <div class="fg"><label>下游水位 (m)</label><input type="number" class="fc" id="bc-z" value="3.5" step="0.01"></div>
+          </div>
+        </div>
+      </div>
+      <div class="ps">
+        <div class="psh open" onclick="togglePS(this)">
+          <div class="psh-l"><div class="psh-ico" style="background:#fff0e0;color:#d97d45"><svg viewBox="0 0 11 11"><path d="M1 2H10M1 5H10M1 8H10" opacity=".4"/><path d="M1 5H10"/></svg></div>断面加密</div>
+          <span class="psh-arr">▾</span>
+        </div>
+        <div class="psb open">
+          <div class="fg-row">
+            <div class="fg"><label>目标间距 (m)</label><input type="number" class="fc" id="ds-ds" value="100" min="10"></div>
+            <div class="fg"><label>插值方法</label>
+              <select class="fc" id="ds-m"><option value="angle">切线偏角</option><option value="linear">线性</option><option value="tangent">纯切线</option></select>
+            </div>
+          </div>
+          <div class="fg"><label>端点约束</label>
+            <div class="ro-row" id="ds-ep"><span class="ro sel" onclick="selRO(this,'ds-ep')">岸线求交</span><span class="ro" onclick="selRO(this,'ds-ep')">端点插值</span><span class="ro" onclick="selRO(this,'ds-ep')">固定宽度</span></div>
+          </div>
+          <button class="ab ab-blue ab-full" style="margin-top:4px" onclick="runDensify()">
+            <svg viewBox="0 0 12 12"><path d="M2 6H10M7.5 3L10 6L7.5 9"/></svg>执行断面加密
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: 计算 -->
+    <div class="rp-body" id="tab-compute" style="display:none">
+      <div class="ps">
+        <div class="psh open" onclick="togglePS(this)">
+          <div class="psh-l"><div class="psh-ico" style="background:var(--blue-l);color:var(--blue)"><svg viewBox="0 0 11 11"><rect x="1" y="2" width="9" height="7" rx="1"/><path d="M4 5.5H7M5.5 4V7"/></svg></div>计算参数</div>
+          <span class="psh-arr">▾</span>
+        </div>
+        <div class="psb open">
+          <div class="fg-row">
+            <div class="fg"><label>计算历时 (h)</label><input type="number" class="fc" id="sim-dur" value="24" min="1"></div>
+            <div class="fg"><label>时间步长 (s)</label><input type="number" class="fc" id="sim-dt" value="10" min="1"></div>
+          </div>
+          <div class="fg-row">
+            <div class="fg"><label>输出间隔 (min)</label><input type="number" class="fc" id="sim-out" value="60"></div>
+            <div class="fg"><label>初始水位 (m)</label><input type="number" class="fc" id="sim-z0" value="2.0" step="0.1"></div>
+          </div>
+          <div class="fg"><label>水动力方程</label>
+            <select class="fc"><option>Saint-Venant（完整）</option><option>扩散波</option><option>运动波</option></select>
+          </div>
+        </div>
+      </div>
+      <div class="ps">
+        <div class="psh open" onclick="togglePS(this)">
+          <div class="psh-l"><div class="psh-ico" style="background:var(--green-l);color:var(--teal)"><svg viewBox="0 0 11 11"><path d="M2 2L8 5.5L2 9Z" fill="currentColor" stroke="none"/></svg></div>运行控制</div>
+          <span class="psh-arr">▾</span>
+        </div>
+        <div class="psb">
+          <div style="display:flex;gap:7px;margin-bottom:12px">
+            <button class="ab ab-teal" style="flex:2" onclick="runSim()"><svg viewBox="0 0 12 12"><path d="M3 2L10 6L3 10Z" fill="currentColor" stroke="none"/></svg>开始计算</button>
+            <button class="ab" style="flex:1" onclick="stopSim()">暂停</button>
+          </div>
+          <div class="prog-top"><span>计算进度</span><span id="sim-pct">0%</span></div>
+          <div class="prog-track"><div class="prog-fill" id="sim-bar"></div></div>
+          <div class="prog-st"><div class="prog-dot" id="sim-dot"></div><span id="sim-st">等待开始…</span></div>
+        </div>
+      </div>
+      <div class="ps">
+        <div class="psh open" onclick="togglePS(this)">
+          <div class="psh-l"><div class="psh-ico" style="background:#1c2535;color:#a8c7fa"><svg viewBox="0 0 11 11"><rect x="1" y="1" width="9" height="9" rx="1"/><path d="M3 4H8"/></svg></div>运行日志</div>
+          <span class="psh-arr">▾</span>
+        </div>
+        <div class="psb">
+          <div class="log-box" id="log-box"><div class="ll"><span class="lt">00:00:00</span><span class="ls">系统就绪…</span></div></div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="ab" style="flex:1;font-size:11px" onclick="clearLog()">清空</button>
+            <button class="ab" style="flex:1;font-size:11px" onclick="notify('日志导出（演示）','info')">导出</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LAYER SETTINGS MODAL -->
+<div class="ls-modal" id="ls-modal">
+  <div class="ls-box">
+    <div class="ls-hd">
+      <div class="ls-hd-dot" id="ls-dot"></div>
+      <span class="ls-hd-title" id="ls-title">图层样式设置</span>
+      <button class="ls-cls" onclick="closeLS()">✕</button>
+    </div>
+    <div class="ls-body" id="ls-body"></div>
+    <div class="ls-ft">
+      <button class="ab" onclick="closeLS()">取消</button>
+      <button class="ab ab-blue" onclick="applyLS()">应用</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEW PROJECT MODAL -->
+<div class="modal-bg" id="modal-new">
+  <div class="modal" style="width:380px">
+    <div class="modal-hd"><span class="modal-title">新建方案</span><button class="modal-cls" onclick="closeModal('modal-new')">✕</button></div>
+    <div class="modal-body">
+      <div class="fg"><label>方案名称</label><input type="text" class="fc" id="new-name" placeholder="如：钱塘江防洪规划2025" value="新方案"></div>
+      <div class="fg"><label>投影坐标系</label>
+        <select class="fc" id="new-crs">
+          <option value="CGCS2000_3TM_108">CGCS2000 3°带 / 108°E</option>
+          <option value="CGCS2000_3TM_111">CGCS2000 3°带 / 111°E</option>
+          <option value="CGCS2000_3TM_114">CGCS2000 3°带 / 114°E</option>
+          <option value="CGCS2000_3TM_117">CGCS2000 3°带 / 117°E</option>
+          <option value="CGCS2000_3TM_120" selected>CGCS2000 3°带 / 120°E</option>
+          <option value="CGCS2000_3TM_123">CGCS2000 3°带 / 123°E</option>
+        </select>
+      </div>
+      <div class="ibox ibox-amber" style="margin-top:8px">⚠ 新建方案将清除当前所有数据，请确认已保存。</div>
+    </div>
+    <div class="modal-ft">
+      <button class="ab" onclick="closeModal('modal-new')">取消</button>
+      <button class="ab ab-blue" onclick="confirmNew()">确认新建</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT MODAL -->
+<div class="modal-bg" id="modal-export">
+  <div class="modal">
+    <div class="modal-hd"><span class="modal-title">导出数据</span><button class="modal-cls" onclick="closeModal('modal-export')">✕</button></div>
+    <div class="modal-body">
+      <div class="dlbl">几何格式</div>
+      <div class="exp-grid">
+        <button class="exp-btn" onclick="doExport('shp')"><svg style="color:var(--blue)" viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="12" rx="1.5" stroke="currentColor" fill="none" stroke-width="1.5"/><path d="M7 4V2M13 4V2M3 9H17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>ESRI Shapefile</span><small>.shp + .dbf + .prj</small></button>
+        <button class="exp-btn" onclick="doExport('geojson')"><svg style="color:var(--green)" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" stroke="currentColor" fill="none" stroke-width="1.5"/><path d="M3 10H17M10 3C8 6 8 14 10 17C12 14 12 6 10 3" stroke="currentColor" stroke-width="1.5"/></svg><span>GeoJSON</span><small>WGS84</small></button>
+        <button class="exp-btn" onclick="doExport('dxf')"><svg style="color:var(--amber)" viewBox="0 0 20 20"><rect x="4" y="3" width="12" height="14" rx="1.5" stroke="currentColor" fill="none" stroke-width="1.5"/><path d="M7 7H13M7 10H11M7 13H9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>AutoCAD DXF</span><small>CGCS2000投影</small></button>
+        <button class="exp-btn" onclick="doExport('csv')"><svg style="color:var(--purple)" viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14" rx="1.5" stroke="currentColor" fill="none" stroke-width="1.5"/><path d="M3 8H17M3 13H17M8 3V17M13 3V17" stroke="currentColor" stroke-width="1" opacity=".4"/></svg><span>坐标表格</span><small>.csv</small></button>
+      </div>
+      <div class="dlbl" style="margin-top:6px">模型格式</div>
+      <div class="exp-grid">
+        <button class="exp-btn" onclick="doExport('hecras')"><svg style="color:var(--blue)" viewBox="0 0 20 20"><path d="M3 14C5 11 7 8 10 10C13 12 15 8 17 6" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/><path d="M3 16H17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>HEC-RAS</span><small>.g01 几何文件</small></button>
+        <button class="exp-btn" onclick="doExport('proj')"><svg style="color:var(--red)" viewBox="0 0 20 20"><path d="M5 3H13L17 7V17H5Z" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linejoin="round"/><path d="M13 3V7H17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>项目文件</span><small>.r1d 完整保存</small></button>
+      </div>
+    </div>
+    <div class="modal-ft"><button class="ab" onclick="closeModal('modal-export')">关闭</button></div>
+  </div>
+</div>
+
+<!-- TOPO MODAL -->
+<div class="modal-bg" id="modal-topo">
+  <div class="modal">
+    <div class="modal-hd"><span class="modal-title">拓扑检查报告</span><button class="modal-cls" onclick="closeModal('modal-topo')">✕</button></div>
+    <div class="modal-body" id="topo-rpt"></div>
+    <div class="modal-ft"><button class="ab ab-blue" onclick="closeModal('modal-topo')">关闭</button></div>
+  </div>
+</div>
+
+<div class="notif" id="notif"><div class="notif-ic" id="notif-ic">✓</div><span id="notif-txt">操作成功</span></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ════════════════════════════════════════════════════════
+//  CGCS2000 GK 3°带正算
+// ════════════════════════════════════════════════════════
+function ll2gk3(lng,lat,cm){
+  const a=6378137,f=1/298.257222101,b=a*(1-f),e2=1-(b/a)**2*(2-f),ep2=e2/(1-e2);
+  const φ=lat*Math.PI/180;
+  const N=a/Math.sqrt(1-e2*Math.sin(φ)**2);
+  const T=Math.tan(φ)**2,C=ep2*Math.cos(φ)**2,A=(lng-cm)*Math.PI/180*Math.cos(φ);
+  const M=a*((1-e2/4-3*e2**2/64-5*e2**3/256)*φ
+    -(3*e2/8+3*e2**2/32+45*e2**3/1024)*Math.sin(2*φ)
+    +(15*e2**2/256+45*e2**3/1024)*Math.sin(4*φ)
+    -(35*e2**3/3072)*Math.sin(6*φ));
+  return{x:N*(A+(1-T+C)*A**3/6+(5-18*T+T*T+72*C-58*ep2)*A**5/120)+500000,
+         y:M+N*Math.tan(φ)*(A*A/2+(5-T+9*C+4*C*C)*A**4/24)};
+}
+function getCM(crs){
+  return{CGCS2000_3TM_108:108,CGCS2000_3TM_111:111,CGCS2000_3TM_114:114,
+         CGCS2000_3TM_117:117,CGCS2000_3TM_120:120,CGCS2000_3TM_123:123}[crs]||null;
+}
+
+// ════════════════════════════════════════════════════════
+//  数据模型
+//  河网 proj.rivers[]  ← 河道数组
+//    river {
+//      id, name, attrs,
+//      reaches[]       ← 河段数组（各段折线坐标）
+//        reach { id, coords[], leaflet }
+//      leaflet_group   ← LayerGroup 包含所有河段 polyline
+//      startCoord      ← 河道首端坐标（第一段第一个点）
+//      endCoord        ← 河道末端坐标（最后一段最后一个点）
+//    }
+//  节点 proj.nodes[]   ← 仅河道首末端
+//  岸线/断面/建筑物维持原有结构
+// ════════════════════════════════════════════════════════
+let map, currentTool=null, drawPts=[], tempLine=null;
+let snapEnabled=true, snapRingEl=null, vtxMarkers=[];
+let selectedRec=null, selectedLeaflet=null, highlightedLeaflets=[];
+let undoStack=[], simTimer=null;
+let featureCnt={river:0,bank:0,section:0,structure:0};
+let hydroIdCnt={river:0, reach:0, bank:0, section:0, structure:0}; // HydroID 计数器（全局唯一）
+function nextHydroId(type){ hydroIdCnt[type]=(hydroIdCnt[type]||0)+1; return hydroIdCnt[type]; }
+let lg={};  // Leaflet LayerGroups
+let proj={
+  name:'', crs:'CGCS2000_3TM_120', desc:'',
+  rivers:[],   // 河道（每条含 reaches 数组）
+  banks:[],
+  sections:[],
+  structures:[],
+  nodes:[]
+};
+
+// ════════════════════════════════════════════════════════
+//  核心样式常量
+// ════════════════════════════════════════════════════════
+const LSTYLE={
+  river:     {color:'#1a6cff', weight:3,   opacity:.9},
+  bank:      {color:'#00a878', weight:2.5, opacity:.9, dashArray:'10 5'},
+  section:   {color:'#f4a261', weight:2.5, opacity:1,  dashArray:'10 4'},
+  structure: {color:'#e63946', weight:3.5, opacity:1}
+};
+let REACH_STYLE={color:'#1a6cff', weight:3, opacity:.9};
+const TC={river:'#1a6cff',bank:'#00a878',section:'#f4a261',structure:'#e63946',select:'#6c63ff'};
+const TN={river:'河道',bank:'岸线',section:'横断面',structure:'水工建筑物'};
+const SNAP_PX=18;
+
+// ════════════════════════════════════════════════════════
+//  属性字段定义
+// ════════════════════════════════════════════════════════
+const SCHEMA={
+  river:[
+    {key:'hydroId',label:'HydroID',    type:'text',    ph:'自动生成',  ro:true},
+    {key:'name',   label:'河道名称',   type:'text',    ph:'如：River-1'},
+    {key:'reachName',label:'河段名称', type:'text',    ph:'如：Reach-1（首段）'},
+    {key:'length', label:'弧长 (m)',   type:'number',  ph:'',ro:true},
+    {key:'fromName', label:'起始节点', type:'text', ph:'--', ro:true},
+    {key:'toName',   label:'终止节点', type:'text', ph:'--', ro:true},
+    {key:'notes',  label:'备注',       type:'textarea',ph:''}
+  ],
+  bank:[
+    {key:'name',   label:'岸线名称',   type:'text',    ph:'如：左岸堤防'},
+    {key:'side',   label:'岸别',       type:'select',  opts:['左岸','右岸','无侧别']},
+    {key:'hydroId',label:'所属河道ID', type:'text',    ph:''},
+    {key:'length', label:'弧长 (m)',   type:'number',  ph:'',ro:true},
+    {key:'notes',  label:'备注',       type:'textarea',ph:''}
+  ],
+  section:[
+    {key:'hydroId',label:'ID',          type:'text',    ph:'自动生成',ro:true},
+    {key:'name',   label:'断面名称',    type:'text',    ph:'如：CS-001'},
+    {key:'station',label:'里程 (m)',    type:'number',  ph:''},
+    {key:'reachId',label:'所属河段ID',  type:'text',    ph:'Reach HydroID'},
+    {key:'notes',  label:'备注',        type:'textarea',ph:''}
+  ],
+  structure:[
+    {key:'name',   label:'建筑物名称', type:'text',    ph:'如：赤坞水闸'},
+    {key:'stype',  label:'类型',       type:'select',  opts:['水闸','堰/溢流堰','泵站','桥梁','涵洞','拦河坝','其他']},
+    {key:'station',label:'里程 (m)',   type:'number',  ph:''},
+    {key:'elev',   label:'顶高程 (m)',type:'number',   ph:''},
+    {key:'width',  label:'孔宽 (m)',   type:'number',  ph:''},
+    {key:'hydroId',label:'所属河道ID', type:'text',    ph:''},
+    {key:'notes',  label:'备注',       type:'textarea',ph:''}
+  ]
+};
+
+// ════════════════════════════════════════════════════════
+//  图层样式设置（可由用户修改）
+// ════════════════════════════════════════════════════════
+let layerSettings={
+  river:    {color:'#1a6cff',weight:3,   opacity:.9, dashArray:'',  showLabel:false, labelField:'name'},
+  bank:     {color:'#00a878',weight:2.5, opacity:.9, dashArray:'10 5', showLabel:false, labelField:'name'},
+  section:  {color:'#f4a261',weight:2.5, opacity:1,  dashArray:'10 4', showLabel:true,  labelField:'name'},
+  structure:{color:'#e63946',weight:3.5, opacity:1,  dashArray:'',  showLabel:true,  labelField:'name'},
+  nodes:    {colorUpstream:'#00a878', colorDownstream:'#e63946', colorJunction:'#6c63ff',
+             radius:6, showLabel:true}
+};
+
+// 当前 LS 编辑的图层名
+let _lsLayer=null;
+
+function openLS(name){
+  _lsLayer=name;
+  const st=layerSettings[name];
+  const titles={river:'河道中心线',bank:'岸线（堤防）',section:'横断面',structure:'水工建筑物',nodes:'拓扑节点'};
+  const colors={river:'#1a6cff',bank:'#00a878',section:'#f4a261',structure:'#e63946',nodes:'#6c63ff'};
+  document.getElementById('ls-dot').style.background=colors[name]||'#aaa';
+  document.getElementById('ls-title').textContent=titles[name]||name;
+
+  let html='';
+  if(name==='nodes'){
+    html=`
+    <div class="ls-row"><span class="ls-lbl">上游节点颜色</span>
+      <input type="color" class="ls-clr" id="lsi-colorUpstream" value="${st.colorUpstream}"></div>
+    <div class="ls-row"><span class="ls-lbl">下游节点颜色</span>
+      <input type="color" class="ls-clr" id="lsi-colorDownstream" value="${st.colorDownstream}"></div>
+    <div class="ls-row"><span class="ls-lbl">汊点颜色</span>
+      <input type="color" class="ls-clr" id="lsi-colorJunction" value="${st.colorJunction}"></div>
+    <div class="ls-row"><span class="ls-lbl">节点半径 (px)</span>
+      <input type="range" class="ls-range" id="lsi-radius" min="3" max="14" step="1" value="${st.radius}"
+        oninput="document.getElementById('lsv-radius').textContent=this.value">
+      <span class="ls-val" id="lsv-radius">${st.radius}</span></div>
+    <div class="ls-row"><span class="ls-lbl">显示节点编号</span>
+      <input type="checkbox" class="ls-ck" id="lsi-showLabel" ${st.showLabel?'checked':''}></div>`;
+  } else {
+    const dashOpts=['','6 3','10 4','10 5','2 4'];
+    const dashNames=['实线','短虚线','中虚线','长虚线','点线'];
+    const dashSel=dashOpts.map((v,i)=>`<option value="${v}" ${st.dashArray===v?'selected':''}>${dashNames[i]}</option>`).join('');
+    const labelFieldRow=(name==='section'||name==='structure')?`
+    <div class="ls-row"><span class="ls-lbl">标注字段</span>
+      <select class="fc" id="lsi-labelField" style="flex:1;height:28px;font-size:12px">
+        <option value="name" ${st.labelField==='name'?'selected':''}>名称</option>
+        <option value="station" ${st.labelField==='station'?'selected':''}>里程</option>
+      </select></div>`:'';
+    html=`
+    <div class="ls-row"><span class="ls-lbl">线条颜色</span>
+      <input type="color" class="ls-clr" id="lsi-color" value="${st.color}"></div>
+    <div class="ls-row"><span class="ls-lbl">线宽 (px)</span>
+      <input type="range" class="ls-range" id="lsi-weight" min="1" max="10" step=".5" value="${st.weight}"
+        oninput="document.getElementById('lsv-weight').textContent=this.value">
+      <span class="ls-val" id="lsv-weight">${st.weight}</span></div>
+    <div class="ls-row"><span class="ls-lbl">透明度</span>
+      <input type="range" class="ls-range" id="lsi-opacity" min=".1" max="1" step=".05" value="${st.opacity}"
+        oninput="document.getElementById('lsv-opacity').textContent=parseFloat(this.value).toFixed(2)">
+      <span class="ls-val" id="lsv-opacity">${st.opacity}</span></div>
+    <div class="ls-row"><span class="ls-lbl">虚线样式</span>
+      <select class="fc" id="lsi-dashArray" style="flex:1;height:28px;font-size:12px">${dashSel}</select></div>
+    <div class="ls-row"><span class="ls-lbl">显示名称标注</span>
+      <input type="checkbox" class="ls-ck" id="lsi-showLabel" ${st.showLabel?'checked':''}></div>
+    ${labelFieldRow}`;
+  }
+  document.getElementById('ls-body').innerHTML=html;
+  document.getElementById('ls-modal').classList.add('show');
+}
+function closeLS(){ document.getElementById('ls-modal').classList.remove('show'); _lsLayer=null; }
+
+function applyLS(){
+  const name=_lsLayer;
+  if(!name){ closeLS(); return; }
+  const st=layerSettings[name];
+
+  if(name==='nodes'){
+    st.colorUpstream   = document.getElementById('lsi-colorUpstream').value;
+    st.colorDownstream = document.getElementById('lsi-colorDownstream').value;
+    st.colorJunction   = document.getElementById('lsi-colorJunction').value;
+    st.radius          = parseInt(document.getElementById('lsi-radius').value);
+    st.showLabel       = document.getElementById('lsi-showLabel').checked;
+    autoGenNodes(true);
+  } else {
+    st.color     = document.getElementById('lsi-color').value;
+    st.weight    = parseFloat(document.getElementById('lsi-weight').value);
+    st.opacity   = parseFloat(document.getElementById('lsi-opacity').value);
+    st.dashArray = document.getElementById('lsi-dashArray').value;
+    st.showLabel = document.getElementById('lsi-showLabel').checked;
+    const lfEl   = document.getElementById('lsi-labelField');
+    if(lfEl) st.labelField = lfEl.value;
+
+    // 同步到 LSTYLE（影响新建要素）
+    if(LSTYLE[name]){
+      LSTYLE[name].color=st.color; LSTYLE[name].weight=st.weight;
+      LSTYLE[name].opacity=st.opacity;
+      LSTYLE[name].dashArray=st.dashArray||null;
+    }
+    if(name==='river'){
+      REACH_STYLE.color=st.color; REACH_STYLE.weight=st.weight; REACH_STYLE.opacity=st.opacity;
+    }
+
+    // 更新图层色块（侧边栏小色条）
+    const sw=document.querySelector('[data-layer="'+name+'"].li-sw');
+    if(sw) sw.style.background=st.color;
+    TC[name]=st.color;
+
+    // 应用到所有已有要素
+    applyLayerStyle(name, st);
+  }
+
+  refreshLabels(name);
+  closeLS();
+  notify('样式已应用','ok');
+  addLog('ls','图层样式更新：'+name);
+}
+function applyLayerStyle(name, st){
+  const style={color:st.color,weight:st.weight,opacity:st.opacity,
+                dashArray:st.dashArray||null};
+  if(name==='river'){
+    proj.rivers.forEach(river=>{
+      river.reaches.forEach(reach=>{
+        // 跳过高亮中的河段
+        if(!highlightedLeaflets.includes(reach.leaflet))
+          reach.leaflet.setStyle(style);
+      });
+    });
+  } else {
+    lg[name].eachLayer(l=>{ if(l.setStyle) l.setStyle(style); });
+  }
+}
+
+// ── 标注层（所有标注统一放在 lg.labels）────────────────────────
+let labelLayers={river:[],bank:[],section:[],structure:[],nodes:[]};
+
+function refreshLabels(name){
+  // 移除旧标注
+  var old=labelLayers[name]||[];
+  old.forEach(function(m){map.removeLayer(m);});
+  labelLayers[name]=[];
+
+  var st=layerSettings[name];
+  if(name==='nodes'){
+    if(!st.showLabel) return;
+    proj.nodes.forEach(function(nd){
+      var m=L.marker([nd.lat,nd.lng],{
+        icon:L.divIcon({className:'river-label',html:nd.id,iconAnchor:[-6,-2]}),
+        interactive:false
+      }).addTo(map);
+      labelLayers.nodes.push(m);
+    });
+    return;
+  }
+
+  if(!st.showLabel) return;
+  var field=st.labelField||'name';
+
+  function makeLabel(label, lat, lng){
+    var m=L.marker([lat,lng],{
+      icon:L.divIcon({
+        className:'river-label',
+        html:'<span style="color:'+st.color+';text-shadow:0 0 3px #fff,0 0 3px #fff">'+label+'</span>',
+        iconAnchor:[0,0]
+      }),
+      interactive:false
+    }).addTo(map);
+    labelLayers[name].push(m);
+  }
+
+  if(name==='river'){
+    proj.rivers.forEach(function(river){
+      if(!river.reaches.length) return;
+      var label=river.attrs[field]||river.attrs.name||'';
+      if(!label) return;
+      var rc=river.reaches[0].coords;
+      var mid=rc[Math.floor(rc.length/2)];
+      makeLabel(label, mid.lat, mid.lng);
+    });
+  } else {
+    var arr=proj[name+'s']||[];
+    arr.forEach(function(rec){
+      var label=(rec.attrs&&rec.attrs[field])||'';
+      if(!label) return;
+      var lls=rec.leaflet&&rec.leaflet.getLatLngs();
+      if(!lls||!lls.length) return;
+      var mid=lls[Math.floor(lls.length/2)];
+      makeLabel(label, mid.lat, mid.lng);
+    });
+  }
+}
+
+
+// ════════════════════════════════════════════════════════
+//  MAP INIT
+// ════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════
+//  方案管理：新建 / 打开 / 保存 / 另存为
+// ════════════════════════════════════════════════════════
+let currentFilename = null;  // 当前方案文件名（本地保存时用）
+let isDirty = false;         // 是否有未保存修改
+
+// 标记数据已修改
+function markDirty(){
+  isDirty = true;
+  const btn = document.getElementById('btn-save');
+  if(btn) btn.style.color = '#f4a261';
+}
+function markClean(){
+  isDirty = false;
+  const btn = document.getElementById('btn-save');
+  if(btn) btn.style.color = '';
+}
+
+// 新建
+function newProject(){
+  showModal('modal-new');
+  setTimeout(()=>document.getElementById('new-name')?.focus(), 100);
+}
+
+function confirmNew(){
+  const name = document.getElementById('new-name').value.trim() || '新方案';
+  const crs  = document.getElementById('new-crs').value;
+  closeModal('modal-new');
+
+  // 重置所有数据
+  deselect();
+  ['river','bank','section','structure','nodes'].forEach(n=>{
+    if(lg[n]) lg[n].clearLayers();
+  });
+  proj.rivers=[]; proj.banks=[]; proj.sections=[]; proj.structures=[]; proj.nodes=[];
+  undoStack=[];
+  Object.keys(featureCnt).forEach(k=>featureCnt[k]=0);
+  Object.keys(hydroIdCnt).forEach(k=>hydroIdCnt[k]=0);
+  proj.name=name; proj.crs=crs; proj.desc='';
+  currentFilename=null;
+  markClean();
+
+  // 更新界面
+  const pname=document.getElementById('p-name'); if(pname) pname.value=name;
+  const pcrs=document.getElementById('p-crs');   if(pcrs)  pcrs.value=crs;
+  updateStats();
+  autoGenNodes(true);
+  notify('新建方案：'+name,'ok');
+  addLog('ls','新建方案：'+name+' ['+crs+']');
+}
+
+// 打开
+function openProject(){
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='.r1d,.json';
+  inp.onchange=function(e){
+    const file=e.target.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=function(ev){
+      try{
+        const data=JSON.parse(ev.target.result);
+        loadProjectData(data, file.name);
+      }catch(err){
+        notify('文件格式错误：'+err.message,'err');
+        addLog('le','打开失败：'+err.message);
+      }
+    };
+    reader.readAsText(file,'UTF-8');
+  };
+  inp.click();
+}
+
+function loadProjectData(data, filename){
+  // 清空当前
+  deselect();
+  ['river','bank','section','structure','nodes'].forEach(n=>{
+    if(lg[n]) lg[n].clearLayers();
+  });
+  undoStack=[];
+
+  // 恢复基础信息
+  proj.name = data.name||'';
+  proj.crs  = data.crs||'CGCS2000_3TM_120';
+  proj.desc = data.desc||'';
+
+  // 恢复计数器
+  if(data._featureCnt)  Object.assign(featureCnt, data._featureCnt);
+  if(data._hydroIdCnt)  Object.assign(hydroIdCnt, data._hydroIdCnt);
+
+  // 恢复河道
+  proj.rivers=[];
+  (data.rivers||[]).forEach(r=>{
+    const river={id:r.id,type:'river',attrs:{...r.attrs},reaches:[],leaflet_group:null};
+    (r.reaches||[]).forEach(rc=>{
+      const coords=rc.coords;
+      const pl=L.polyline(coords.map(c=>L.latLng(c.lat,c.lng)),{...REACH_STYLE}).addTo(lg.river);
+      const nr={id:rc.id,hydroId:rc.hydroId,name:rc.name,coords,leaflet:pl,riverRef:river};
+      pl.on('click',ev=>{L.DomEvent.stopPropagation(ev);if(currentTool==='select')selectRiver(river,pl);});
+      river.reaches.push(nr);
+    });
+    proj.rivers.push(river);
+  });
+
+  // 恢复非河道要素（岸线、断面、建筑物）
+  ['banks','sections','structures'].forEach(key=>{
+    proj[key]=[];
+    (data[key]||[]).forEach(rec=>{
+      const type=key.slice(0,-1);
+      const pl=L.polyline(rec.coords.map(c=>L.latLng(c.lat,c.lng)),{...LSTYLE[type]}).addTo(lg[type]);
+      const nr={id:rec.id,type,coords:rec.coords,attrs:{...rec.attrs},leaflet:pl};
+      pl.on('click',ev=>{L.DomEvent.stopPropagation(ev);if(currentTool==='select')selectFeature(nr,pl);});
+      proj[key].push(nr);
+    });
+  });
+
+  // 更新界面
+  const pname=document.getElementById('p-name'); if(pname) pname.value=proj.name;
+  const pcrs=document.getElementById('p-crs');   if(pcrs)  pcrs.value=proj.crs;
+  updateStats();
+  autoGenNodes(true);
+  currentFilename=filename||null;
+  markClean();
+
+  // 自动缩放到数据范围
+  setTimeout(fitAll,300);
+  notify('已打开：'+(filename||proj.name),'ok');
+  addLog('ls','打开方案：'+proj.name+' (河道'+proj.rivers.length+' 断面'+proj.sections.length+')');
+}
+
+// 序列化项目数据
+function serializeProject(){
+  return {
+    _version: '1.0',
+    _saved: new Date().toISOString(),
+    name: proj.name,
+    crs:  proj.crs,
+    desc: proj.desc,
+    _featureCnt: {...featureCnt},
+    _hydroIdCnt: {...hydroIdCnt},
+    rivers: proj.rivers.map(r=>({
+      id:r.id, attrs:{...r.attrs},
+      reaches: r.reaches.map(rc=>({
+        id:rc.id, hydroId:rc.hydroId, name:rc.name,
+        coords:rc.coords
+      }))
+    })),
+    banks: proj.banks.map(b=>({id:b.id,coords:b.coords,attrs:{...b.attrs}})),
+    sections: proj.sections.map(s=>({id:s.id,coords:s.coords,attrs:{...s.attrs}})),
+    structures: proj.structures.map(st=>({id:st.id,coords:st.coords,attrs:{...st.attrs}}))
+  };
+}
+
+// 保存（覆盖或另存）
+function saveProject(){
+  const data = serializeProject();
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (proj.name||'river1d_project').replace(/[\/:*?"<>|]/g,'_') + '.r1d';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  markClean();
+  currentFilename = a.download;
+  notify('方案已保存：'+a.download,'ok');
+  addLog('lok','保存方案：'+a.download);
+}
+
+// 另存为（弹出选择）
+function saveProjectAs(){
+  const name = prompt('另存为（方案名称）：', proj.name||'新方案');
+  if(!name) return;
+  const old = proj.name;
+  proj.name = name;
+  saveProject();
+  if(!isDirty) proj.name = name; // 保持新名称
+  else proj.name = old;
+}
+
+// 快捷键
+document.addEventListener('keydown', function(e){
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+  if((e.ctrlKey||e.metaKey)&&e.key==='n'){e.preventDefault();newProject();}
+  if((e.ctrlKey||e.metaKey)&&e.key==='o'){e.preventDefault();openProject();}
+  if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveProject();}
+});
+
+// 数据变化时标记 dirty（在 commitReach/commitFeature 末尾调用）
+// 用 MutationObserver 监听 undoStack 长度变化太复杂，改为在关键操作后直接调用
+
+
+// ════════════════════════════════════════════════════════
+//  断面编辑器（独立窗口）
+// ════════════════════════════════════════════════════════
+function openXsEditor(){
+  const w=window.open('xs_editor.html','xs_editor',
+    'width=1280,height=800,resizable=yes,scrollbars=no');
+  if(!w){notify('请允许弹出窗口','warn');return;}
+  // 等待子窗口加载完成后注入数据
+  const timer=setInterval(()=>{
+    try{
+      if(w.closed){clearInterval(timer);return;}
+      if(w.document&&w.document.readyState==='complete'&&w.loadFromParent){
+        clearInterval(timer);
+        // 子窗口通过 window.opener.proj 读取数据，无需传参
+        w.loadFromParent();
+        addLog('ls','断面编辑器已打开');
+      }
+    }catch(e){clearInterval(timer);}
+  },300);
+}
+
+
+function initMap(){
+  map=L.map('map',{zoomControl:false,doubleClickZoom:false}).setView([30.25,120.15],11);
+  const TK='1d109683f4d84198e37a38c442d68311';
+  const bm=[
+    L.layerGroup([
+      L.tileLayer(`https://t{s}.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TK}`,{subdomains:'01234567',attribution:'© 天地图',maxZoom:18}),
+      L.tileLayer(`https://t{s}.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cva&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TK}`,{subdomains:'01234567',maxZoom:18})
+    ]),
+    L.layerGroup([
+      L.tileLayer(`https://t{s}.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TK}`,{subdomains:'01234567',attribution:'© 天地图影像',maxZoom:18}),
+      L.tileLayer(`https://t{s}.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TK}`,{subdomains:'01234567',maxZoom:18})
+    ]),
+    L.tileLayer('https://gac-geo.googlecnapps.cn/maps/vt?lyrs=s&x={x}&y={y}&z={z}',{attribution:'© Google',maxZoom:20}),
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OSM',maxZoom:19})
+  ];
+  window._bm=bm;  bm[0].addTo(map);
+
+  // lg.river 是一个 LayerGroup，包含所有河段的 polyline
+  // 实际上每条河道有自己的 leaflet_group，lg.river 是总容器
+  lg={river:L.layerGroup().addTo(map), bank:L.layerGroup().addTo(map),
+      section:L.layerGroup().addTo(map), structure:L.layerGroup().addTo(map),
+      nodes:L.layerGroup().addTo(map)};
+
+  map.on('click',onMapClick);
+  map.on('dblclick',onMapDblClick);
+  map.on('mousemove',onMouseMove);
+  map.on('zoomend',()=>document.getElementById('cb-z').textContent=map.getZoom());
+  document.addEventListener('keydown',onKeyDown);
+  updateStats();
+  addLog('ls','初始化完成 · 天地图矢量 · CGCS2000 GK3°');
+}
+
+// ════════════════════════════════════════════════════════
+//  KEYBOARD
+// ════════════════════════════════════════════════════════
+function onKeyDown(e){
+  if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+  const k=e.key.toLowerCase();
+  if(k==='escape'){closeLS();cancelDraw();deselect();return;}
+  if(k==='s'){setTool('select');return;}
+  if(k==='r'){setTool('river');return;}
+  if(k==='b'){setTool('bank');return;}
+  if(k==='x'){setTool('section');return;}
+  if(k==='w'){setTool('structure');return;}
+  if((e.ctrlKey||e.metaKey)&&k==='z'){e.preventDefault();undoLast();}
+}
+
+// ════════════════════════════════════════════════════════
+//  BASEMAP
+// ════════════════════════════════════════════════════════
+function setBM(i){
+  window._bm.forEach((b,j)=>{if(map.hasLayer(b))map.removeLayer(b);document.getElementById('bm-'+j)?.classList.remove('active');});
+  window._bm[i].addTo(map);document.getElementById('bm-'+i)?.classList.add('active');
+  addLog('ls','底图：'+['天地图矢量','天地图影像','谷歌影像','OSM'][i]);
+}
+
+// ════════════════════════════════════════════════════════
+//  TOOL
+// ════════════════════════════════════════════════════════
+function setTool(t){
+  cancelDraw();
+  currentTool=t;
+  document.querySelectorAll('.dt').forEach(b=>b.classList.remove('active'));
+  document.getElementById('dt-'+t)?.classList.add('active');
+  const dot=document.getElementById('dh-dot');
+  const txt=document.getElementById('dh-text');
+  dot.style.background=TC[t]||'#aaa';
+  if(t==='select'){
+    map.getContainer().style.cursor='default';
+    txt.textContent='单击要素查看/编辑属性';
+    document.getElementById('draw-hint').classList.add('show');
+    return;
+  }
+  deselect();
+  map.getContainer().style.cursor='crosshair';
+  const hints={
+    river: '绘制河段：单击添加节点，双击结束',
+    bank:  '绘制岸线：捕捉已有岸线端点，单击添加节点，ESC取消',
+    section:   '绘制横断面：单击两端点自动完成',
+    structure: '绘制建筑物：单击两端点自动完成'
+  };
+  txt.textContent=hints[t]||('绘制 '+TN[t]);
+  document.getElementById('draw-hint').classList.add('show');
+  addLog('ls','工具：'+TN[t]);
+}
+
+function cancelDraw(){
+  clearDrawState();
+  if(currentTool&&currentTool!=='select'){
+    currentTool=null;
+    document.querySelectorAll('.dt').forEach(b=>b.classList.remove('active'));
+    map.getContainer().style.cursor='';
+    document.getElementById('draw-hint').classList.remove('show');
+  }
+}
+
+// ════════════════════════════════════════════════════════
+//  SNAP ENGINE
+//
+//  河道工具：捕捉已有所有河段的 所有节点（含中间节点），
+//    新河段从任意节点出发都归入该节点所属河道。
+//    若第一个点捕捉到 河道A，新河段并入河道A；
+//    若没捕捉，创建新河道；
+//    末尾点不改变归属（一段河段归属于起点确定的河道）。
+//
+//  岸线工具：只捕捉岸线端点（首末），用于连续岸线
+//  断面/建筑物：捕捉所有已有图层节点
+// ════════════════════════════════════════════════════════
+function findSnapRiver(ll){
+  // 捕捉所有河段的任意节点
+  // 返回 {ll, river, isOuterEndpoint}
+  //   isOuterEndpoint=true: 捕捉到河道整体的对外首/末端点（可延伸）
+  //   isOuterEndpoint=false: 捕捉到河道内部折线节点（应新建支流+分割）
+  if(!snapEnabled) return null;
+  const pt=map.latLngToLayerPoint(ll);
+  let bestLL=null, bestRiver=null, bestD=SNAP_PX*SNAP_PX, bestIsOuter=false;
+  proj.rivers.forEach(river=>{
+    // 河道对外端点 = 首段的首点 + 末段的末点
+    const firstReach=river.reaches[0];
+    const lastReach=river.reaches[river.reaches.length-1];
+    const outerPts=firstReach&&lastReach ? [
+      {c:firstReach.coords[0], isOuter:true},
+      {c:lastReach.coords[lastReach.coords.length-1], isOuter:true}
+    ] : [];
+
+    river.reaches.forEach(reach=>{
+      reach.coords.forEach((c,ci)=>{
+        const p=map.latLngToLayerPoint(L.latLng(c.lat,c.lng));
+        const d=(p.x-pt.x)**2+(p.y-pt.y)**2;
+        if(d<bestD){
+          bestD=d; bestLL=L.latLng(c.lat,c.lng); bestRiver=river;
+          // 判断是否对外端点
+          bestIsOuter=outerPts.some(op=>
+            Math.abs(op.c.lat-c.lat)<1e-10&&Math.abs(op.c.lng-c.lng)<1e-10
+          );
+        }
+      });
+    });
+  });
+  return bestLL?{ll:bestLL,river:bestRiver,isOuterEndpoint:bestIsOuter}:null;
+}
+
+// ════════════════════════════════════════════════════════
+//  线上捕捉：检测点到折线线段的垂足，判断是否在线体上
+//  返回 {ll, river, reach, segIdx, splitCoord} 或 null
+// ════════════════════════════════════════════════════════
+const SNAP_LINE_PX = 14;
+
+function findSnapOnReach(ll, excludeRiver){
+  if(!snapEnabled) return null;
+  const pt = map.latLngToLayerPoint(ll);
+  let best=null, bestD=SNAP_LINE_PX*SNAP_LINE_PX;
+
+  proj.rivers.forEach(river=>{
+    if(excludeRiver && river===excludeRiver) return;
+    river.reaches.forEach(reach=>{
+      const coords=reach.coords;
+      for(let i=0;i<coords.length-1;i++){
+        const A=map.latLngToLayerPoint(L.latLng(coords[i].lat,   coords[i].lng));
+        const B=map.latLngToLayerPoint(L.latLng(coords[i+1].lat, coords[i+1].lng));
+        const abx=B.x-A.x, aby=B.y-A.y;
+        const len2=abx*abx+aby*aby;
+        if(len2<1) continue;
+        let t=((pt.x-A.x)*abx+(pt.y-A.y)*aby)/len2;
+        t=Math.max(0,Math.min(1,t));
+        // 排除端点附近（端点由节点捕捉处理）
+        if(t<0.03||t>0.97) continue;
+        const px=A.x+t*abx, py=A.y+t*aby;
+        const d2=(pt.x-px)**2+(pt.y-py)**2;
+        if(d2<bestD){
+          bestD=d2;
+          const splitLat=coords[i].lat+t*(coords[i+1].lat-coords[i].lat);
+          const splitLng=coords[i].lng+t*(coords[i+1].lng-coords[i].lng);
+          best={ll:L.latLng(splitLat,splitLng), river, reach, segIdx:i, splitCoord:{lat:splitLat,lng:splitLng}};
+        }
+      }
+    });
+  });
+  return best;
+}
+
+// ════════════════════════════════════════════════════════
+//  河段分割：在 splitCoord 处将 reach 拆成两段
+// ════════════════════════════════════════════════════════
+function splitReachAtPoint(hostRiver, reach, segIdx, splitCoord){
+  // ── 干流在交叉点处分裂为两条独立河道 ──────────────────────────
+  // 正确拓扑：交叉点是3条河道的汇流节点，而不是同一条河道的内部节点
+  const coords = reach.coords;
+  const firstPt = coords[0];
+  const lastPt  = coords[coords.length-1];
+  const isAtStart = firstPt &&
+    Math.abs(splitCoord.lat - firstPt.lat) < 1e-8 &&
+    Math.abs(splitCoord.lng - firstPt.lng) < 1e-8;
+  const isAtEnd = lastPt &&
+    Math.abs(splitCoord.lat - lastPt.lat) < 1e-8 &&
+    Math.abs(splitCoord.lng - lastPt.lng) < 1e-8;
+
+  // 命中已有河段端点：
+  // - 外端点：不分割（仅连接）
+  // - 内部端点：需要做“按节点断开”的河道重分组，而不是对单条 reach 继续几何分割
+  if(isAtStart || isAtEnd){
+    const NODE_TOL = 1; // m
+    function nearPt(a, b){
+      return L.latLng(a.lat,a.lng).distanceTo(L.latLng(b.lat,b.lng)) < NODE_TOL;
+    }
+    function isSplitNode(c){
+      return nearPt(c, splitCoord);
+    }
+
+    // 找到在 splitCoord 处接触的河段（端点接触）
+    const incident = hostRiver.reaches.filter(r=>{
+      const s=r.coords[0], e=r.coords[r.coords.length-1];
+      return isSplitNode(s) || isSplitNode(e);
+    });
+    // 只有 1 段接触，说明是外端点，不需要拆分
+    if(incident.length < 2){
+      addLog('ls','命中河段外端点：仅连接，不分割');
+      return false;
+    }
+
+    function linkedOutsideNode(ra, rb){
+      const aEnds=[ra.coords[0], ra.coords[ra.coords.length-1]];
+      const bEnds=[rb.coords[0], rb.coords[rb.coords.length-1]];
+      for(let i=0;i<aEnds.length;i++){
+        for(let j=0;j<bEnds.length;j++){
+          if(isSplitNode(aEnds[i]) || isSplitNode(bEnds[j])) continue;
+          if(nearPt(aEnds[i], bEnds[j])) return true;
+        }
+      }
+      return false;
+    }
+
+    // 在“移除 split 节点连接”后，对原河道做连通分量拆分
+    const pool = hostRiver.reaches.slice();
+    const comps = [];
+    while(pool.length){
+      const seed = pool.pop();
+      const comp = [seed];
+      const q = [seed];
+      while(q.length){
+        const cur = q.shift();
+        for(let i=pool.length-1;i>=0;i--){
+          const cand = pool[i];
+          if(linkedOutsideNode(cur, cand)){
+            pool.splice(i,1);
+            comp.push(cand);
+            q.push(cand);
+          }
+        }
+      }
+      comps.push(comp);
+    }
+    if(comps.length < 2){
+      addLog('ls','内部端点未形成可拆分连通分量：跳过');
+      return false;
+    }
+
+    const keepComp = comps.find(c=>c.some(r=>r.id===reach.id)) || comps[0];
+    const moveComps = comps.filter(c=>c!==keepComp && c.some(r=>incident.includes(r)));
+    if(!moveComps.length){
+      addLog('ls','内部端点拆分未命中有效分量：跳过');
+      return false;
+    }
+
+    function mkNodeSplitRiver(name, attrs){
+      featureCnt.river++;
+      const _hid=nextHydroId('river');
+      return {
+        id: `river_node_split_${Date.now()}_${Math.random().toString(36).slice(2,5)}`,
+        type: 'river',
+        attrs: {name:`River-${_hid}`, hydroId:String(_hid), order: attrs.order||'',
+                length:'0', reaches:'0', from:'', to:'', notes: attrs.notes||''},
+        reaches: [], leaflet_group: null
+      };
+    }
+
+    const movedGroups = [];
+    moveComps.forEach((comp, idx)=>{
+      const newRiver = mkNodeSplitRiver(hostRiver.attrs.name + '-节点拆分' + (idx+1), hostRiver.attrs);
+      const movedIds = new Set(comp.map(r=>r.id));
+      hostRiver.reaches = hostRiver.reaches.filter(r=>!movedIds.has(r.id));
+      comp.forEach(r=>{
+        r.riverRef = newRiver;
+        r.leaflet.off('click');
+        r.leaflet.on('click', e=>{
+          L.DomEvent.stopPropagation(e);
+          if(currentTool==='select') selectRiver(newRiver, r.leaflet);
+        });
+        newRiver.reaches.push(r);
+      });
+      updateRiverStats(newRiver);
+      proj.rivers.push(newRiver);
+      movedGroups.push({river:newRiver, reaches:comp});
+    });
+
+    updateRiverStats(hostRiver);
+    undoStack.push({
+      kind:'split_node',
+      hostRiver,
+      movedGroups,
+      splitCoord:{lat:splitCoord.lat,lng:splitCoord.lng}
+    });
+    addLog('ls', `河道「${hostRiver.attrs.name}」在节点处分裂为 ${1+movedGroups.length} 条河道`);
+    return true;
+  }
+
+  // 交叉点前的坐标序列（干流上段）
+  // 若 splitCoord 与 coords[segIdx+1] 重合（节点分割），不重复添加
+  // 判断 splitCoord 是否恰好就是 coords[segIdx+1]（节点级精确分割）
+  const nextPt = coords[segIdx+1];
+  const isNodeSplit = nextPt && (
+    Math.abs(splitCoord.lat - nextPt.lat) < 1e-8 &&
+    Math.abs(splitCoord.lng - nextPt.lng) < 1e-8
+  );
+  // part1: 从起点到分割点（含分割点）
+  // part2: 从分割点到终点（含分割点）
+  const part1 = isNodeSplit
+    ? coords.slice(0, segIdx+2)          // 包含 coords[segIdx+1]
+    : [...coords.slice(0, segIdx+1), splitCoord];
+  const part2 = isNodeSplit
+    ? coords.slice(segIdx+1)              // 从 coords[segIdx+1] 开始
+    : [splitCoord, ...coords.slice(segIdx+1)];
+
+  // 若分割后任一段不足2点，说明分割点在端点，无法分割
+  if(part1.length<2 || part2.length<2){
+    addLog('lw','分割点在端点，跳过分割');
+    return false;
+  }
+
+  // 若当前选中的正是被分割的河道，先清除高亮（避免残留）
+  if(selectedRec && selectedRec.id===hostRiver.id) deselect();
+  // 从原河道中移除被分割的河段
+  hostRiver.reaches = hostRiver.reaches.filter(r=>r.id!==reach.id);
+  lg.river.removeLayer(reach.leaflet);
+  undoStack = undoStack.filter(u=>!(u.kind==='reach'&&u.reach===reach));
+
+  // 辅助：创建新河道对象
+  function mkRiver(name, attrs){
+    featureCnt.river++;
+    const _hid=nextHydroId('river');
+    return {
+      id: `river_split_${Date.now()}_${Math.random().toString(36).slice(2,5)}`,
+      type: 'river',
+      attrs: {name:`River-${_hid}`, hydroId:String(_hid), order: attrs.order||'',
+              length:'0', reaches:'0', from:'', to:'', notes: attrs.notes||''},
+      reaches: [], leaflet_group: null
+    };
+  }
+
+  // 辅助：创建河段 polyline 并挂载到河道
+  function mkReach(pts, river){
+    const pl = L.polyline(pts.map(c=>L.latLng(c.lat,c.lng)), {...REACH_STYLE}).addTo(lg.river);
+    const rid = `reach_split_${Date.now()}_${Math.random().toString(36).slice(2,5)}`;
+    const _rhid=nextHydroId('reach');
+    const nr  = {id:rid, hydroId:_rhid, name:`Reach-${_rhid}`,
+                 coords:pts, leaflet:pl, riverRef:river};
+    pl.on('click', e=>{
+      L.DomEvent.stopPropagation(e);
+      if(currentTool==='select') selectRiver(river, pl);
+    });
+    river.reaches.push(nr);
+    return nr;
+  }
+
+  // 判断原河道是否还有其他河段（被多次分割的情况）
+  const remainingReaches = hostRiver.reaches.slice(); // 已过滤掉本河段（拷贝，避免后续修改影响）
+
+  if(remainingReaches.length === 0){
+    // 原河道只有这一个河段 → 分裂为两条新河道
+    // 命名：取原名去掉之前可能已经有的 -上/-下 后缀，加上新编号
+    // 命名：取原始河道名（去掉之前所有分割后缀），加新序号
+    const baseName = hostRiver.attrs.name.split('·')[0].trim();
+    featureCnt.river++;
+    const river1 = mkRiver(baseName + '·' + featureCnt.river, hostRiver.attrs);
+    featureCnt.river++;
+    const river2 = mkRiver(baseName + '·' + featureCnt.river, hostRiver.attrs);
+    const nr1 = mkReach(part1, river1);
+    const nr2 = mkReach(part2, river2);
+    updateRiverStats(river1);
+    updateRiverStats(river2);
+
+    // 删除原河道，加入两条新河道
+    proj.rivers = proj.rivers.filter(r=>r.id!==hostRiver.id);
+    proj.rivers.push(river1, river2);
+
+    undoStack.push({kind:'split', oldRiver:hostRiver, river1, river2, nr1, nr2, oldReach:reach});
+    addLog('ls', `河道「${hostRiver.attrs.name}」已拆分为「${river1.attrs.name}」和「${river2.attrs.name}」`);
+    return true;
+  } else {
+    // 原河道还有其他河段：
+    // 不能简单地把“其余河段”都留给原河道，否则会把不连通的两段错误归到同一河道。
+    // 需要按端点连通性判断其余河段更接近 part1 还是 part2。
+    const newRiver = mkRiver(hostRiver.attrs.name + '-支', hostRiver.attrs);
+    const nr1 = mkReach(part1, hostRiver); // 前段留原河道
+    const nr2 = mkReach(part2, newRiver);  // 后段新建河道
+
+    const CONNECT_TOL = 1; // m，河段端点连通容差
+    function linkedByEndpoint(ra, rb){
+      const a0 = ra.coords[0], a1 = ra.coords[ra.coords.length-1];
+      const b0 = rb.coords[0], b1 = rb.coords[rb.coords.length-1];
+      return (
+        L.latLng(a0.lat,a0.lng).distanceTo(L.latLng(b0.lat,b0.lng)) < CONNECT_TOL ||
+        L.latLng(a0.lat,a0.lng).distanceTo(L.latLng(b1.lat,b1.lng)) < CONNECT_TOL ||
+        L.latLng(a1.lat,a1.lng).distanceTo(L.latLng(b0.lat,b0.lng)) < CONNECT_TOL ||
+        L.latLng(a1.lat,a1.lng).distanceTo(L.latLng(b1.lat,b1.lng)) < CONNECT_TOL
+      );
+    }
+    function collectConnected(seed, pool){
+      const side = new Set();
+      const queue = [seed];
+      while(queue.length){
+        const cur = queue.shift();
+        pool.forEach(r=>{
+          if(side.has(r)) return;
+          if(linkedByEndpoint(cur, r)){
+            side.add(r);
+            queue.push(r);
+          }
+        });
+      }
+      return side;
+    }
+
+    const sidePart1 = collectConnected(nr1, remainingReaches);
+    const sidePart2 = collectConnected(nr2, remainingReaches);
+    const movedReaches = [...sidePart2].filter(r=>!sidePart1.has(r));
+
+    if(movedReaches.length){
+      const movedIds = new Set(movedReaches.map(r=>r.id));
+      hostRiver.reaches = hostRiver.reaches.filter(r=>!movedIds.has(r.id));
+      movedReaches.forEach(r=>{
+        r.riverRef = newRiver;
+        r.leaflet.off('click');
+        r.leaflet.on('click', e=>{
+          L.DomEvent.stopPropagation(e);
+          if(currentTool==='select') selectRiver(newRiver, r.leaflet);
+        });
+        newRiver.reaches.push(r);
+      });
+    }
+
+    updateRiverStats(hostRiver);
+    updateRiverStats(newRiver);
+    proj.rivers.push(newRiver);
+    undoStack.push({kind:'split_partial', oldRiver:hostRiver, newRiver, nr1, nr2, movedReaches, oldReach:reach});
+    addLog('ls', `河道「${hostRiver.attrs.name}」分出新河道「${newRiver.attrs.name}」${movedReaches.length?`（连通重分配 ${movedReaches.length} 段）`:''}`);
+    return true;
+  }
+}
+
+
+// ════════════════════════════════════════════════════════
+//  地理距离版线上捕捉（供 commitReach 提交时使用）
+//  不依赖屏幕像素，用米为单位
+// ════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════
+//  两折线几何相交检测
+//  返回第一个有效交点 {river, reach, segIdx, t, splitCoord}
+//  或 null（无交点）
+//  excludeRiver: 排除的河道（支流自身）
+// ════════════════════════════════════════════════════════
+function findEndpointOnRiver(coords, excludeRiver){
+  // 检测 coords 的首点和末点是否落在其他河道线体上
+  // 返回所有命中的列表（可能两端都命中不同河道）
+  // 每项: {river, reach, segIdx, splitCoord, endpointIdx}
+  const zoom = map.getZoom();
+  const TOL_M = Math.max(15, 400 / Math.pow(2, zoom-10));
+
+  const candidates = [
+    {idx:0,               pt:coords[0]},
+    {idx:coords.length-1, pt:coords[coords.length-1]}
+  ];
+  // 首末相同则只检查一个
+  const toCheck = coords.length===1 ? [candidates[0]] : candidates;
+
+  const hits = [];
+
+  for(const {idx,pt} of toCheck){
+    const pLat=pt.lat, pLng=pt.lng;
+    const pLL=L.latLng(pLat,pLng);
+    let bestD=TOL_M, bestHit=null;
+
+    proj.rivers.forEach(river=>{
+      if(excludeRiver && river===excludeRiver) return;
+      river.reaches.forEach(reach=>{
+        const rc=reach.coords;
+
+        // 检查所有折线节点（含首末）是否与支流端点重合
+        for(let i=0;i<rc.length;i++){
+          const d=pLL.distanceTo(L.latLng(rc[i].lat,rc[i].lng));
+          if(d<bestD){
+            // 判断是否是可分割的内部节点（排除整条河道的对外首末端）
+            // 对外首末端 = 该 reach 首/末点 且 该 reach 是河道唯一一段时
+            // 的首/末点。多段河道的内部连接点不是对外端
+            const isReachStart=(i===0);
+            const isReachEnd=(i===rc.length-1);
+            // 找到分割参数
+            let segIdx, splitCoord;
+            if(isReachStart){
+              // 节点是该 reach 首点 → 分割在 segIdx=-1 位置（等同于不分割此reach，
+              // 找前一个 reach 末点）此处简化：用 segIdx=0 t=0 即reach首
+              // 实际应分割前一个 reach，但先记录
+              segIdx=0;
+              splitCoord={lat:rc[0].lat,lng:rc[0].lng};
+            } else if(isReachEnd){
+              segIdx=rc.length-2;
+              splitCoord={lat:rc[rc.length-1].lat,lng:rc[rc.length-1].lng};
+            } else {
+              segIdx=i-1; // 分割在 i-1 线段末端
+              splitCoord={lat:rc[i].lat,lng:rc[i].lng};
+            }
+            bestD=d;
+            bestHit={river,reach,segIdx,splitCoord,endpointIdx:idx,
+                     nodeIdxInReach:i, isReachStart, isReachEnd};
+          }
+        }
+
+        // 检查线段内部（非节点位置）
+        for(let i=0;i<rc.length-1;i++){
+          const aLat=rc[i].lat,aLng=rc[i].lng;
+          const bLat=rc[i+1].lat,bLng=rc[i+1].lng;
+          const dLat=bLat-aLat,dLng=bLng-aLng;
+          const len2=dLat*dLat+dLng*dLng;
+          if(len2<1e-20) continue;
+          let t=((pLat-aLat)*dLat+(pLng-aLng)*dLng)/len2;
+          t=Math.max(0,Math.min(1,t));
+          if(t<0.02||t>0.98) continue;
+          const footLat=aLat+t*dLat,footLng=aLng+t*dLng;
+          const d=pLL.distanceTo(L.latLng(footLat,footLng));
+          if(d<bestD){
+            bestD=d;
+            bestHit={river,reach,segIdx:i,
+                     splitCoord:{lat:footLat,lng:footLng},
+                     endpointIdx:idx, nodeIdxInReach:-1,
+                     isReachStart:false, isReachEnd:false};
+          }
+        }
+      });
+    });
+
+    if(bestHit) hits.push(bestHit);
+  }
+  return hits; // 返回数组（0、1或2个命中）
+}
+
+function findSnapBank(ll){
+  // 只捕捉岸线的首末端点
+  if(!snapEnabled) return null;
+  const pt=map.latLngToLayerPoint(ll);
+  let best=null,bestD=SNAP_PX*SNAP_PX;
+  proj.banks.forEach(bank=>{
+    const c=bank.coords;
+    [c[0],c[c.length-1]].forEach(co=>{
+      const p=map.latLngToLayerPoint(L.latLng(co.lat,co.lng));
+      const d=(p.x-pt.x)**2+(p.y-pt.y)**2;
+      if(d<bestD){bestD=d;best=L.latLng(co.lat,co.lng);}
+    });
+  });
+  return best;
+}
+
+function findSnapGeneral(ll){
+  if(!snapEnabled) return null;
+  const pt=map.latLngToLayerPoint(ll);
+  let best=null,bestD=SNAP_PX*SNAP_PX;
+  Object.values(lg).forEach(g=>g.eachLayer(layer=>{
+    const lls=layer.getLatLngs?layer.getLatLngs():null;
+    if(!lls) return;
+    const flat=Array.isArray(lls[0])?lls.flat():lls;
+    flat.forEach(p=>{
+      const pp=map.latLngToLayerPoint(p);
+      const d=(pp.x-pt.x)**2+(pp.y-pt.y)**2;
+      if(d<bestD){bestD=d;best=p;}
+    });
+  }));
+  return best;
+}
+
+// 显示捕捉圆环（黄色）+ 河道名称提示（如果捕捉到河道节点）
+function showSnapRing(ll, colorOrLabel){
+  removeSnapRing();
+  const p=map.latLngToContainerPoint(ll);
+  const wrap=document.createElement('div');
+  wrap.style.cssText=`position:absolute;left:${p.x}px;top:${p.y}px;pointer-events:none;z-index:800;transform:translate(-50%,-50%)`;
+  // colorOrLabel: '#xxxxxx' 颜色, 或文字标签, 或 undefined
+  const isColor = colorOrLabel && colorOrLabel.startsWith('#');
+  const ringColor = isColor ? colorOrLabel : '#ffd600';
+  wrap.innerHTML=`<div class="snap-ring" style="position:static;transform:none;border-color:${ringColor};background:${ringColor}22"></div>`;
+  if(colorOrLabel && !isColor){
+    const lbl=document.createElement('div');
+    lbl.style.cssText='position:absolute;left:12px;top:-8px;background:#ffd600;color:#0d1117;font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;white-space:nowrap;font-family:\'DM Sans\',sans-serif';
+    lbl.textContent='→ '+colorOrLabel;
+    wrap.appendChild(lbl);
+  }
+  map.getContainer().appendChild(wrap);
+  snapRingEl=wrap;
+}
+function removeSnapRing(){if(snapRingEl){snapRingEl.remove();snapRingEl=null;}}
+
+// ════════════════════════════════════════════════════════
+//  绘制时的"目标河道"（绘制河段时用）
+//  drawTargetRiver: 当捕捉到已有河道节点时，记录目标河道
+// ════════════════════════════════════════════════════════
+let drawTargetRiver=null;  // river对象 或 null（null=新建河道）
+
+// ════════════════════════════════════════════════════════
+//  MAP EVENTS
+// ════════════════════════════════════════════════════════
+function onMapClick(e){
+  if(currentTool==='select'){deselect();return;}
+  if(!currentTool) return;
+  L.DomEvent.stopPropagation(e);
+
+  let ll=e.latlng;
+
+  if(currentTool==='river'){
+    if(drawPts.length===0){
+      // ── 起点捕捉：区分对外端点（延伸）和内部节点（新建支流）──
+      const snap=findSnapRiver(ll);
+      if(snap){
+        ll=snap.ll;
+        if(snap.isOuterEndpoint){
+          // 对外端点：延伸该河道
+          drawTargetRiver=snap.river;
+          showSnapRing(ll,'#ffd600');
+          addLog('ls','延伸河道：「'+snap.river.attrs.name+'」');
+        } else {
+          // 内部节点：新建支流，该节点将成为汊点
+          drawTargetRiver=null;
+          showSnapRing(ll,'#f4a261'); // 橙色=汊点
+          addLog('ls','汊点起点，新建支流（不并入「'+snap.river.attrs.name+'」）');
+        }
+      } else {
+        removeSnapRing();
+        drawTargetRiver=null;
+      }
+    } else {
+      // 后续点：节点捕捉 → 捕捉到节点时自动完成当前河段
+      const onNode=findSnapRiver(ll);
+      if(onNode){
+        ll=onNode.ll;
+        showSnapRing(ll,'#ffd600');
+        // 标记：下次 click 处理完后自动提交（末点已捕捉到节点）
+        window._autoCommitRiver=true;
+      } else {
+        removeSnapRing();
+        window._autoCommitRiver=false;
+      }
+    }
+  } else if(currentTool==='bank'){
+    const snap=findSnapBank(ll);
+    if(snap){ll=snap;showSnapRing(ll);}else removeSnapRing();
+  } else {
+    const snap=findSnapGeneral(ll);
+    if(snap){ll=snap;showSnapRing(ll);}else removeSnapRing();
+  }
+
+  drawPts.push(ll);
+  addVtx(ll, drawPts.length===1);
+  updateTempLine();
+
+  // 断面/建筑物：第2点单击后自动完成
+  if((currentTool==='section'||currentTool==='structure')&&drawPts.length===2){
+    commitFeature();
+    return;
+  }
+
+  // 河道：末点捕捉到已有节点时自动完成当前河段
+  if(currentTool==='river' && window._autoCommitRiver && drawPts.length>=2){
+    window._autoCommitRiver=false;
+    commitFeature();
+    return;
+  }
+}
+
+function onMapDblClick(e){
+  L.DomEvent.stopPropagation(e);
+  L.DomEvent.preventDefault(e);
+  if(!currentTool||currentTool==='select') return;
+
+  if(currentTool==='section'||currentTool==='structure'){
+    // 断面/建筑物两点单击自动完成，双击不触发额外行为
+    return;
+  }
+
+  // ── 关键修复：Leaflet 双击 = click+click+dblclick 三事件 ──
+  // 第1个 click: 加入倒数第2个点
+  // 第2个 click: 加入末点（可能设置了 _pendingLineSplit）
+  // 第3个 dblclick: 此时 _pendingLineSplit 已被第2个click之后
+  //   的额外click（Leaflet内部行为）清空，需要在此处恢复
+  //
+  // 解决方案：dblclick 时直接从末点重新检测线上吸附
+  // （因为此时 drawPts 还有末点，pop 之前重新检测）
+  // 河道/岸线：双击结束，移除Leaflet双击多加的末尾重复点
+  if(drawPts.length>1){
+    drawPts.pop();
+    const last=vtxMarkers.pop();
+    if(last) map.removeLayer(last);
+  }
+  if(drawPts.length<2){cancelDraw();notify('至少需要2个节点','warn');return;}
+  commitFeature();
+}
+
+function addVtx(ll, isFirst){
+  const m=L.marker(ll,{
+    icon:L.divIcon({className:'',html:`<div class="vtx-d${isFirst?' vtx-first':''}"></div>`,iconSize:[8,8],iconAnchor:[4,4]}),
+    interactive:false,zIndexOffset:600
+  }).addTo(map);
+  vtxMarkers.push(m);
+}
+
+function updateTempLine(){
+  if(!currentTool) return;
+  if(tempLine){tempLine.setLatLngs(drawPts);}
+  else if(drawPts.length>=1){
+    tempLine=L.polyline(drawPts,{color:TC[currentTool],weight:2.5,opacity:.75,dashArray:'7 4'}).addTo(map);
+  }
+}
+
+function onMouseMove(e){
+  const ll=e.latlng;
+  document.getElementById('cb-wgs').textContent=`${ll.lng.toFixed(6)}, ${ll.lat.toFixed(6)}`;
+  const cm=getCM(document.getElementById('p-crs').value);
+  if(cm){const{x,y}=ll2gk3(ll.lng,ll.lat,cm);document.getElementById('cb-x').textContent=x.toFixed(1);document.getElementById('cb-y').textContent=y.toFixed(1);}
+  else{document.getElementById('cb-x').textContent=ll.lng.toFixed(6);document.getElementById('cb-y').textContent=ll.lat.toFixed(6);}
+  document.getElementById('cb-z').textContent=map.getZoom();
+
+  // rubber-band
+  if(drawPts.length>0&&currentTool&&currentTool!=='select'){
+    const pts=[...drawPts,ll];
+    if(tempLine){tempLine.setLatLngs(pts);}
+    else{tempLine=L.polyline(pts,{color:TC[currentTool],weight:2,dashArray:'6 4',opacity:.65}).addTo(map);}
+  }
+
+  // snap indicator
+  if(currentTool&&currentTool!=='select'&&snapEnabled){
+    if(currentTool==='river'){
+      // 节点吸附提示（黄色）
+      const snap=findSnapRiver(ll);
+      if(snap) showSnapRing(snap.ll,'#ffd600');
+      else removeSnapRing();
+    } else if(currentTool==='bank'){
+      const snap=findSnapBank(ll);
+      if(snap)showSnapRing(snap,'#ffd600');else removeSnapRing();
+    } else {
+      const snap=findSnapGeneral(ll);
+      if(snap)showSnapRing(snap,'#ffd600');else removeSnapRing();
+    }
+  }
+}
+
+function clearDrawState(){
+  drawPts=[];
+  vtxMarkers.forEach(m=>map.removeLayer(m));vtxMarkers=[];
+  if(tempLine){map.removeLayer(tempLine);tempLine=null;}
+  removeSnapRing();
+  drawTargetRiver=null;
+}
+
+// ════════════════════════════════════════════════════════
+//  COMMIT FEATURE
+//  河道：新河段 append 到 drawTargetRiver，或新建河道
+// ════════════════════════════════════════════════════════
+function commitFeature(){
+  if(!currentTool||drawPts.length<2){cancelDraw();return;}
+  const t=currentTool;
+
+  if(t==='river'){
+    commitReach();
+    return;
+  }
+
+  // 非河道要素（岸线、断面、建筑物）
+  featureCnt[t]++;
+  const defName={bank:`岸线-${featureCnt[t]}`,
+    section:`CS-${String(featureCnt[t]).padStart(3,'0')}`,
+    structure:`建筑物-${featureCnt[t]}`};
+  let len=0;
+  for(let i=1;i<drawPts.length;i++) len+=drawPts[i-1].distanceTo(drawPts[i]);
+  const attrs={name:defName[t],length:len.toFixed(1)};
+  if(t==='bank') attrs.side='左岸';
+  if(t==='structure') attrs.stype='水闸';
+  if(t==='section'){
+    const _shid=nextHydroId('section');
+    attrs.hydroId=String(_shid);
+    attrs.name='CS-'+String(_shid).padStart(3,'0');
+    attrs.reachId='';
+    attrs.profile=[]; // 起点距-高程数据点 [{dist, elev}, ...]
+  }
+
+  const pl=L.polyline(drawPts,{...LSTYLE[t]}).addTo(lg[t]);
+  const rec={id:`${t}_${Date.now()}`,type:t,
+    coords:drawPts.map(p=>({lat:p.lat,lng:p.lng})),attrs,leaflet:pl};
+  proj[t+'s'].push(rec);
+  undoStack.push({kind:'feature',layer:lg[t],leaflet:pl,arr:proj[t+'s'],rec});
+  pl.on('click',e=>{L.DomEvent.stopPropagation(e);if(currentTool==='select')selectFeature(rec,pl);});
+
+  const n=drawPts.length;
+  clearDrawState();
+  updateStats();
+  notify(`${TN[t]}「${attrs.name}」完成（${n}pt, ${len>1000?(len/1000).toFixed(2)+'km':len.toFixed(0)+'m'}）`,'ok');
+  addLog('lok',`${TN[t]} [${attrs.name}] n=${n}`);
+  setTool(t);
+}
+
+// ════════════════════════════════════════════════════════
+//  COMMIT REACH（核心：河段拼接逻辑）
+// ════════════════════════════════════════════════════════
+function commitReach(){
+  const pts   = drawPts.slice();
+  const coords = pts.map(p=>({lat:p.lat, lng:p.lng}));
+  let len=0;
+  for(let i=1;i<pts.length;i++) len+=pts[i-1].distanceTo(pts[i]);
+
+  // ══════════════════════════════════════════════════════
+  // 步骤1：确定支流归属河道（必须在分割之前完成）
+  // ══════════════════════════════════════════════════════
+  let targetRiver = drawTargetRiver;  // 起点捕捉到的河道（可能为 null）
+
+  const _isExtend = !!targetRiver; // 是否延伸已有河道
+  if(!targetRiver){
+    // 起点未捕捉到已有河道 → 新建支流河道
+    featureCnt.river++;
+    const _hid = nextHydroId('river');
+    targetRiver = {
+      id: `river_${Date.now()}`,
+      type: 'river',
+      attrs: {name:`River-${_hid}`, hydroId:String(_hid), order:'',
+              length:'0', reaches:'0', from:'', to:'', notes:''},
+      reaches: [], leaflet_group: null
+    };
+    proj.rivers.push(targetRiver);
+    addLog('ls', `新建河道：${targetRiver.attrs.name} [HydroID=${_hid}]`);
+  }
+
+  // ══════════════════════════════════════════════════════
+  // 步骤2：检测支流端点是否落在其他河道线体上 → 分割干流
+  //   排除 targetRiver 自身，避免自交
+  // ══════════════════════════════════════════════════════
+  // ── 步骤2：逐端点检测汊点分割 ─────────────────────────────
+  // 核心规则：支流端点落在已有河道上时：
+  //   A. 落在河道"内部节点"或"线段内部" → 分割该河道
+  //   B. 落在河道"对外端点"（整条河道首/末） → 不分割（只是两河道首尾相连）
+  //
+  // "对外端点"定义：
+  //   对所有 proj.rivers 中除 targetRiver 外的每条河道，
+  //   收集其【所有河段中没有被其他河段连接的孤立端点】
+  //   = 悬挂端 = 同 autoGenNodes 中的悬挂端逻辑
+
+  // 先计算所有河道的"对外端点"集合（坐标集）
+  const NODE_TOL = 5; // 节点匹配容差（米），严格匹配避免误判
+  function getOuterEndpoints(river){
+    const allEnds=[];
+    river.reaches.forEach(r=>{
+      allEnds.push(r.coords[0]);
+      allEnds.push(r.coords[r.coords.length-1]);
+    });
+    return allEnds.filter((ep,i)=>
+      !allEnds.some((other,j)=>{
+        if(i===j) return false;
+        return L.latLng(ep.lat,ep.lng).distanceTo(L.latLng(other.lat,other.lng))<NODE_TOL;
+      })
+    );
+  }
+
+  let splitCount=0;
+  for(let pass=0; pass<2; pass++){
+    const epIdx = pass===0 ? coords.length-1 : 0;
+    const pt    = coords[epIdx];
+    const ptLL  = L.latLng(pt.lat, pt.lng);
+    const zoom  = map.getZoom();
+    // TOL：屏幕像素对应的地理距离，zoom越大TOL越小
+    // zoom=10: ~75m  zoom=12: ~20m  zoom=14: ~5m
+    const TOL = Math.max(5, 100/Math.pow(2,zoom-10));
+
+    let bestD=TOL, bestHit=null;
+
+    proj.rivers.forEach(function(river){
+      if(river===targetRiver) return;
+      // 获取该河道的对外端点
+      const outerEps=getOuterEndpoints(river);
+
+      river.reaches.forEach(function(reach){
+        const rc=reach.coords;
+
+        // 检查折线所有节点
+        for(let i=0;i<rc.length;i++){
+          const d=ptLL.distanceTo(L.latLng(rc[i].lat,rc[i].lng));
+          if(d<bestD){
+            bestD=d;
+            const isReachEndpoint = (i===0 || i===rc.length-1);
+            const isInternalNode = !outerEps.some(ep=>
+              L.latLng(ep.lat,ep.lng).distanceTo(L.latLng(rc[i].lat,rc[i].lng))<NODE_TOL
+            );
+            // 节点 i 是线段 [i-1, i] 的终点，segIdx = i-1
+            // 分割后：part1 = coords[0..i]，part2 = coords[i..]
+            const segIdx = Math.max(0, i-1);
+            bestHit={river,reach,segIdx,
+                     splitCoord:{lat:rc[i].lat,lng:rc[i].lng},
+                     endpointIdx:epIdx,
+                     isReachEndpoint,
+                     needSplit: isInternalNode};
+          }
+        }
+        // 检查线段内部（非节点位置）
+        for(let i=0;i<rc.length-1;i++){
+          const aLat=rc[i].lat, aLng=rc[i].lng;
+          const bLat=rc[i+1].lat, bLng=rc[i+1].lng;
+          const dLat=bLat-aLat, dLng=bLng-aLng;
+          const len2=dLat*dLat+dLng*dLng;
+          if(len2<1e-20) continue;
+          let t=((pt.lat-aLat)*dLat+(pt.lng-aLng)*dLng)/len2;
+          t=Math.max(0,Math.min(1,t));
+          if(t<0.02||t>0.98) continue;
+          const fLat=aLat+t*dLat, fLng=aLng+t*dLng;
+          const d=ptLL.distanceTo(L.latLng(fLat,fLng));
+          if(d<bestD){
+            bestD=d;
+            bestHit={river,reach,segIdx:i,
+                     splitCoord:{lat:fLat,lng:fLng},
+                     endpointIdx:epIdx,
+                     needSplit:true};  // 线段内部始终需要分割
+          }
+        }
+      });
+    });
+
+    if(!bestHit) continue;
+
+    // 修正端点坐标为精确汊点坐标
+    coords[epIdx]={lat:bestHit.splitCoord.lat, lng:bestHit.splitCoord.lng};
+
+    if(bestHit.needSplit){
+      const didSplit = splitReachAtPoint(bestHit.river, bestHit.reach, bestHit.segIdx, bestHit.splitCoord);
+      if(didSplit){
+        splitCount++;
+        addLog('lok','汊点分割['+(pass+1)+'] 「'+bestHit.river.attrs.name+'」→现有'+proj.rivers.length+'条河道');
+      } else {
+        addLog('ls','汊点命中已有分段端点：跳过重复分割');
+      }
+    }
+    // 对外端点：仅对齐坐标，不分割（两条河道首尾相连，正常拓扑）
+  }
+  if(splitCount>0) autoGenNodes(true);
+
+  // ══════════════════════════════════════════════════════
+  // 步骤2b：折线几何相交检测
+  //   检测新绘制折线与已有河道折线是否有几何交叉点
+  //   若有，在交叉点处分割被交河道，并将交叉点插入新折线
+  // ══════════════════════════════════════════════════════
+  {
+    // 线段求交工具函数
+    function seg2seg(ax,ay,bx,by,cx,cy,dx,dy){
+      const abx=bx-ax,aby=by-ay,cdx=dx-cx,cdy=dy-cy;
+      const denom=abx*cdy-aby*cdx;
+      if(Math.abs(denom)<1e-14) return null;
+      const t=((cx-ax)*cdy-(cy-ay)*cdx)/denom;
+      const u=((cx-ax)*aby-(cy-ay)*abx)/denom;
+      if(t>1e-9&&t<1-1e-9&&u>1e-9&&u<1-1e-9){
+        return {t,u,lat:ay+t*(by-ay),lng:ax+t*(bx-ax)};
+      }
+      return null;
+    }
+
+    // 找新折线与所有已有河道的所有几何交叉点
+    // 结果按新折线方向排序（newSegIdx, t升序）
+    const geoHits=[];
+    proj.rivers.forEach(function(river){
+      if(river===targetRiver) return;
+      river.reaches.forEach(function(reach){
+        const rc=reach.coords;
+        for(let ni=0;ni<coords.length-1;ni++){
+          for(let ri=0;ri<rc.length-1;ri++){
+            const hit=seg2seg(
+              coords[ni].lng, coords[ni].lat,
+              coords[ni+1].lng, coords[ni+1].lat,
+              rc[ri].lng, rc[ri].lat,
+              rc[ri+1].lng, rc[ri+1].lat
+            );
+            if(hit){
+              geoHits.push({
+                lat:hit.lat, lng:hit.lng,
+                newSegIdx:ni, t:hit.t,
+                river, reach, reachSegIdx:ri, u:hit.u
+              });
+            }
+          }
+        }
+      });
+    });
+
+    if(geoHits.length>0){
+      // 按新折线方向排序
+      geoHits.sort((a,b)=>a.newSegIdx!==b.newSegIdx?a.newSegIdx-b.newSegIdx:a.t-b.t);
+
+      // 将交叉点插入 coords（从后往前插，保持索引稳定）
+      // 先收集每个 newSegIdx 对应的插入点（可能多个）
+      const insertMap={};
+      geoHits.forEach(h=>{
+        if(!insertMap[h.newSegIdx]) insertMap[h.newSegIdx]=[];
+        insertMap[h.newSegIdx].push({t:h.t, lat:h.lat, lng:h.lng});
+      });
+      // 从后往前处理每段，插入交叉点
+      const segIdxs=Object.keys(insertMap).map(Number).sort((a,b)=>b-a);
+      segIdxs.forEach(si=>{
+        const pts=insertMap[si].sort((a,b)=>b.t-a.t); // 从后往前
+        pts.forEach(p=>{
+          coords.splice(si+1,0,{lat:p.lat,lng:p.lng});
+        });
+      });
+
+      // 对每个交叉点执行被交河道的分割（去重，同一位置只分割一次）
+      const splitDone=new Set();
+      geoHits.forEach(h=>{
+        const key=h.river.id+'_'+h.reach.id+'_'+h.reachSegIdx+'_'+h.lat.toFixed(6)+'_'+h.lng.toFixed(6);
+        if(splitDone.has(key)) return;
+        splitDone.add(key);
+        const sc={lat:h.lat,lng:h.lng};
+        const didSplit = splitReachAtPoint(h.river, h.reach, h.reachSegIdx, sc);
+        if(didSplit){
+          addLog('lok','几何交叉分割：「'+h.river.attrs.name+'」→现有'+proj.rivers.length+'条河道');
+        } else {
+          addLog('ls','几何交叉命中端点：跳过重复分割');
+        }
+      });
+
+      autoGenNodes(true);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════
+  // 步骤3：将 coords 按交叉点切分，创建多个河段挂入 targetRiver
+  //   coords 在步骤2b中已插入交叉点坐标，
+  //   需要在交叉点处将新河道也切成多段
+  // ══════════════════════════════════════════════════════
+
+  // 找出 coords 中哪些点是交叉点（与已有河道节点重合）
+  // 简化：用 geoHits 中记录的交叉点坐标来确定切割位置
+  // 注意 geoHits 可能已经在步骤2b的块内 — 需要重新收集
+  // 方法：遍历 coords，检测哪些点与任何其他河道的节点重合（步骤2b已插入精确坐标）
+  const SPLIT_TOL = 1; // 1米内视为交叉点
+  // 找出 coords 中所有"内部交叉节点"（排除首末点）
+  const crossIdxs = [];
+  for(let ci=1; ci<coords.length-1; ci++){
+    const cLL = L.latLng(coords[ci].lat, coords[ci].lng);
+    let isCross = false;
+    proj.rivers.forEach(river=>{
+      if(river===targetRiver||isCross) return;
+      river.reaches.forEach(reach=>{
+        if(isCross) return;
+        reach.coords.forEach(rc=>{
+          if(isCross) return;
+          if(cLL.distanceTo(L.latLng(rc.lat,rc.lng))<SPLIT_TOL) isCross=true;
+        });
+      });
+    });
+    if(isCross) crossIdxs.push(ci);
+  }
+
+  // 按切割点把 coords 分成若干段
+  const segments = [];
+  let segStart = 0;
+  crossIdxs.forEach(ci=>{
+    segments.push(coords.slice(segStart, ci+1)); // 包含交叉点作为末点
+    segStart = ci;                                // 下一段从交叉点开始
+  });
+  segments.push(coords.slice(segStart));          // 最后一段
+
+  // 若只有一段（无交叉点），正常创建单个河段
+  // 若有多段，每段创建独立河段，但都归入 targetRiver
+  segments.forEach((segCoords, si)=>{
+    if(segCoords.length < 2) return; // 跳过无效段
+    const pl = L.polyline(segCoords.map(c=>L.latLng(c.lat,c.lng)), {...REACH_STYLE}).addTo(lg.river);
+    const reachId = `reach_${Date.now()}_${si}_${Math.random().toString(36).slice(2,5)}`;
+    const _rhid = nextHydroId('reach');
+    const reach = {id:reachId, hydroId:_rhid, name:`Reach-${_rhid}`,
+                   coords:segCoords, leaflet:pl, riverRef:targetRiver};
+    targetRiver.reaches.push(reach);
+    pl.on('click', e=>{
+      L.DomEvent.stopPropagation(e);
+      if(currentTool==='select') selectRiver(targetRiver, pl);
+    });
+    undoStack.push({kind:'reach', reach, river:targetRiver, leaflet:pl});
+  });
+  updateRiverStats(targetRiver);
+
+  // 若新河道被切成多段且有内部交叉点，也需要把 targetRiver 本身拆分
+  // （交叉点同时是新河道的汊点，应分成独立河道）
+  if(crossIdxs.length > 0){
+    // 从后往前分割 targetRiver（避免索引错位）
+    // 每个交叉点处将 targetRiver 的最后一个 reach 分割
+    // 实际上 segments 已经分好了，直接用 splitReachAtPoint 效果相同
+    // 但更简单的做法：把每段升级为独立河道
+    // segments[0] 归入 targetRiver，segments[1..] 各自新建河道
+    if(segments.length > 1){
+      // 移除 targetRiver 的所有 reaches（刚刚加入的），重新分配
+      const addedReaches = targetRiver.reaches.splice(-segments.length);
+
+      // segment[0] 归入 targetRiver
+      targetRiver.reaches.push(addedReaches[0]);
+      updateRiverStats(targetRiver);
+
+      if(_isExtend){
+        // 延伸已有河道：所有段归入 targetRiver
+        // 关键：把 segment[0] 首点对齐到 targetRiver 已有 reach 的末点，
+        // 消除浮点偏差，确保 autoGenNodes 能正确识别内部连接
+        if(targetRiver.reaches.length > addedReaches.length){
+          const prevReach = targetRiver.reaches[targetRiver.reaches.length - addedReaches.length - 1];
+          if(prevReach){
+            const prevEnd = prevReach.coords[prevReach.coords.length-1];
+            // 对齐 segment[0] 首点坐标
+            if(addedReaches[0].coords.length>0){
+              addedReaches[0].coords[0] = {lat:prevEnd.lat, lng:prevEnd.lng};
+              // 同步 leaflet polyline 的第一个点
+              const lls = addedReaches[0].leaflet.getLatLngs();
+              if(lls.length>0){
+                lls[0] = L.latLng(prevEnd.lat, prevEnd.lng);
+                addedReaches[0].leaflet.setLatLngs(lls);
+              }
+            }
+          }
+        }
+        for(let si=1; si<addedReaches.length; si++){
+          targetRiver.reaches.push(addedReaches[si]);
+          addedReaches[si].riverRef = targetRiver;
+          addedReaches[si].leaflet.off('click');
+          addedReaches[si].leaflet.on('click', e=>{
+            L.DomEvent.stopPropagation(e);
+            if(currentTool==='select') selectRiver(targetRiver, addedReaches[si].leaflet);
+          });
+        }
+        updateRiverStats(targetRiver);
+        autoGenNodes(true);
+      } else {
+        // 新建河道：交叉点拆分为独立河道
+        for(let si=1; si<addedReaches.length; si++){
+          featureCnt.river++;
+          const _hid2 = nextHydroId('river');
+          const newRiver = {
+            id:`river_xs_${Date.now()}_${si}`,
+            type:'river',
+            attrs:{name:`River-${_hid2}`, hydroId:String(_hid2),
+                   order:'', length:'0', reaches:'0', from:'', to:'', notes:''},
+            reaches:[], leaflet_group:null
+          };
+          const nr = addedReaches[si];
+          nr.riverRef = newRiver;
+          nr.leaflet.off('click');
+          nr.leaflet.on('click', e=>{
+            L.DomEvent.stopPropagation(e);
+            if(currentTool==='select') selectRiver(newRiver, nr.leaflet);
+          });
+          newRiver.reaches.push(nr);
+          updateRiverStats(newRiver);
+          proj.rivers.push(newRiver);
+          addLog('ls', `新建河道（交叉分割）：${newRiver.attrs.name}`);
+        }
+        autoGenNodes(true);
+      }
+    }
+  }
+
+  const n = coords.length;
+  clearDrawState();
+  updateStats();
+  notify(`「${targetRiver.attrs.name}」绘制完成（${n}节点，${len.toFixed(0)}m）`, 'ok');
+  const lastReach = targetRiver.reaches[targetRiver.reaches.length-1];
+  const reachName = lastReach ? lastReach.name : 'Reach';
+  const reachHydroId = lastReach ? lastReach.hydroId : '-';
+  addLog('lok', `${reachName}(HydroID=${reachHydroId})→[${targetRiver.attrs.name}] n=${n} L=${len.toFixed(0)}m`);
+
+  // 保持工具激活（河道工具），但重置归属
+  // 下次绘制根据起点捕捉重新判断归属，避免误合并
+  setTool('river');
+  drawTargetRiver = null;  // 不自动延续，让用户明确选择
+  markDirty();
+}
+
+
+function updateRiverStats(river){
+  // 重新计算总长度和河段数，同步首段名称到 attrs
+  let total=0;
+  river.reaches.forEach(r=>{
+    for(let i=1;i<r.coords.length;i++){
+      const a=L.latLng(r.coords[i-1].lat,r.coords[i-1].lng);
+      const b=L.latLng(r.coords[i].lat,r.coords[i].lng);
+      total+=a.distanceTo(b);
+    }
+  });
+  river.attrs.length  = total.toFixed(1);
+  river.attrs.reaches = river.reaches.length;
+  // 同步河段名称列表到 attrs.reachName
+  if(river.reaches.length>0){
+    river.attrs.reachName = river.reaches
+      .map(r=>r.name||(r.hydroId?'Reach-'+r.hydroId:''))
+      .join(' / ');
+  }
+}
+
+// ════════════════════════════════════════════════════════
+//  SELECT
+// ════════════════════════════════════════════════════════
+function selectRiver(river, clickedLeaflet){
+  deselect();
+  selectedRec=river;
+  selectedLeaflet=clickedLeaflet;
+  highlightedLeaflets=[];
+  river.reaches.forEach(r=>{
+    r.leaflet.setStyle({color:'#ffd600',weight:5,opacity:1,dashArray:null});
+    r.leaflet.bringToFront();
+    highlightedLeaflets.push(r.leaflet);
+  });
+  switchRTab('props');
+  buildPropsPanel(river,'river');
+  notify(`已选中：${river.attrs.name}（${river.reaches.length}段）`,'info');
+}
+function selectFeature(rec, pl){
+  deselect();
+  selectedRec=rec; selectedLeaflet=pl;
+  pl.setStyle({color:'#ffd600',weight:5,opacity:1,dashArray:null});
+  pl.bringToFront();
+  switchRTab('props');
+  buildPropsPanel(rec, rec.type);
+  notify(`已选中：${rec.attrs.name||TN[rec.type]}`,'info');
+}
+
+function deselect(){
+  // 直接恢复所有已记录的高亮 leaflet，不依赖 selectedRec 是否仍有效
+  highlightedLeaflets.forEach(pl=>{ try{pl.setStyle({...REACH_STYLE});}catch(e){} });
+  highlightedLeaflets=[];
+  if(selectedLeaflet && selectedRec && selectedRec.type && selectedRec.type!=='river'){
+    try{selectedLeaflet.setStyle({...LSTYLE[selectedRec.type]});}catch(e){}
+  }
+  selectedRec=null; selectedLeaflet=null;
+  document.getElementById('props-empty').style.display='flex';
+  document.getElementById('props-content').style.display='none';
+}
+// ════════════════════════════════════════════════════════
+//  PROPS PANEL
+// ════════════════════════════════════════════════════════
+function buildPropsPanel(rec, type){
+  const schema=SCHEMA[type]||[];
+  const attrs=rec.attrs||{};
+  if(type==='river') updateRiverStats(rec);
+
+  // 几何信息
+  let totalLen=0, totalPts=0, segCount=0;
+  if(type==='river'){
+    segCount=rec.reaches.length;
+    rec.reaches.forEach(r=>{
+      totalPts+=r.coords.length;
+      for(let i=1;i<r.coords.length;i++){
+        totalLen+=L.latLng(r.coords[i-1].lat,r.coords[i-1].lng).distanceTo(L.latLng(r.coords[i].lat,r.coords[i].lng));
+      }
+    });
+  } else if(rec.leaflet){
+    const lls=rec.leaflet.getLatLngs();
+    totalPts=lls.length;
+    for(let i=1;i<lls.length;i++) totalLen+=lls[i-1].distanceTo(lls[i]);
+  }
+  attrs.length=totalLen.toFixed(1);
+  if(type==='river') attrs.reaches=segCount;
+
+  let html=`<div class="ps" style="border-top:3px solid ${TC[type]||'#1a6cff'}">
+    <div class="psh open" onclick="togglePS(this)">
+      <div class="psh-l">
+        <div class="psh-ico" style="background:${(TC[type]||'#1a6cff')}22;color:${TC[type]||'#1a6cff'}">
+          <svg viewBox="0 0 11 11"><path d="M1 9L3.5 5C5 2.5 7.5 3 9 5L10 7" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </div>
+        <span style="color:${TC[type]||'#1a6cff'};font-size:11px">${TN[type]||type}</span>
+        <span style="font-size:10px;color:#8898b0;margin-left:4px">${attrs.name||''}</span>
+      </div><span class="psh-arr">▾</span>
+    </div>
+    <div class="psb open">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#8898b0;background:var(--s1);padding:4px 8px;border-radius:4px;margin-bottom:10px;word-break:break-all">${rec.id}</div>`;
+
+  schema.forEach(f=>{
+    const v=attrs[f.key]??'';
+    html+=`<div class="fg"><label>${f.label}</label>`;
+    if(f.type==='select'){
+      html+=`<select class="fc" id="pf-${f.key}">`;
+      (f.opts||[]).forEach(o=>html+=`<option${o===v?' selected':''}>${o}</option>`);
+      html+=`</select>`;
+    }else if(f.type==='textarea'){
+      html+=`<textarea class="fc" id="pf-${f.key}" placeholder="${f.ph||''}" ${f.ro?'readonly':''}>${v}</textarea>`;
+    }else{
+      html+=`<input type="${f.type}" class="fc" id="pf-${f.key}" value="${v}" placeholder="${f.ph||''}" ${f.ro?'readonly':''}/>`;
+    }
+    html+=`</div>`;
+  });
+  html+=`</div></div>`;
+
+  // 几何统计卡片
+  const cards = type==='river'
+    ? [[segCount,'河段数'],[totalPts,'节点总数'],[totalLen>1000?(totalLen/1000).toFixed(2)+'km':Math.round(totalLen)+'m','总长度']]
+    : [[totalPts,'节点数'],[totalLen>1000?(totalLen/1000).toFixed(2)+'km':Math.round(totalLen)+'m','长度']];
+
+  html+=`<div class="ps"><div class="psh open" onclick="togglePS(this)">
+    <div class="psh-l"><div class="psh-ico" style="background:var(--blue-l);color:var(--blue)"><svg viewBox="0 0 11 11"><path d="M1 5.5A4.5 4.5 0 1 0 10 5.5" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/></svg></div>几何信息</div>
+    <span class="psh-arr">▾</span>
+  </div><div class="psb open">
+  <div style="display:grid;grid-template-columns:${cards.map(()=>'1fr').join(' ')};gap:8px;margin-bottom:10px">`;
+  cards.forEach(([v,l])=>html+=`<div style="background:var(--s1);padding:10px 8px;border-radius:6px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--blue)">${v}</div><div style="font-size:10px;color:#8898b0;margin-top:3px;text-transform:uppercase;letter-spacing:.5px">${l}</div></div>`);
+  html+=`</div>`;
+
+  // 河段列表（仅河道类型）
+  if(type==='river'&&rec.reaches.length>0){
+    html+=`<div style="font-size:11px;font-weight:700;color:var(--ink3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">河段列表</div>
+    <div style="max-height:120px;overflow-y:auto;border:1px solid var(--bd);border-radius:6px">`;
+    rec.reaches.forEach((r,i)=>{
+      let rLen=0;
+      for(let j=1;j<r.coords.length;j++) rLen+=L.latLng(r.coords[j-1].lat,r.coords[j-1].lng).distanceTo(L.latLng(r.coords[j].lat,r.coords[j].lng));
+      const rHid=r.hydroId||'-'; const rName=r.name||('Reach-'+rHid);
+      html+=`<div style="display:flex;align-items:center;padding:6px 10px;border-bottom:1px solid var(--s2);font-size:11.5px;${i===rec.reaches.length-1?'border-bottom:none':''}">
+        <div style="flex-shrink:0;margin-right:8px;text-align:center">
+          <div style="font-size:9px;color:#8898b0;font-family:'JetBrains Mono',monospace">${rHid}</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${rName}</div>
+          <div style="font-size:10px;color:#8898b0">${r.coords.length}节点 · ${rLen.toFixed(0)}m</div>
+        </div>
+        <button onclick="zoomToReach('${rec.id}',${i})" style="margin-left:6px;width:20px;height:20px;border:none;border-radius:4px;background:var(--s2);cursor:pointer;font-size:10px">🔍</button>
+        <button onclick="deleteReach('${rec.id}',${i})" style="margin-left:3px;width:20px;height:20px;border:none;border-radius:4px;background:var(--s2);cursor:pointer;color:var(--red);font-size:10px">✕</button>
+      </div>`;
+    });
+    html+=`</div>`;
+  }
+  html+=`</div></div>`;
+
+  // 断面起点距-高程图（仅 section 类型）
+  if(type==='section'){
+    const profile = rec.attrs.profile || [];
+    const profRows = profile.map((p,i)=>
+      `<tr>
+        <td style="padding:3px 6px"><input type="number" step="0.1" value="${p.dist}"
+          onchange="updateProfile('${rec.id}',${i},'dist',this.value)"
+          style="width:72px;border:1px solid var(--bd2);border-radius:3px;padding:2px 5px;font-size:11px;font-family:'JetBrains Mono',monospace"></td>
+        <td style="padding:3px 6px"><input type="number" step="0.01" value="${p.elev}"
+          onchange="updateProfile('${rec.id}',${i},'elev',this.value)"
+          style="width:72px;border:1px solid var(--bd2);border-radius:3px;padding:2px 5px;font-size:11px;font-family:'JetBrains Mono',monospace"></td>
+        <td style="padding:3px 6px;text-align:center">
+          <button onclick="removeProfileRow('${rec.id}',${i})"
+            style="width:18px;height:18px;border:none;border-radius:3px;background:var(--red-l);color:var(--red);cursor:pointer;font-size:11px;line-height:1">✕</button>
+        </td>
+      </tr>`
+    ).join('');
+
+    html+=`<div class="ps">
+      <div class="psh open" onclick="togglePS(this)">
+        <div class="psh-l">
+          <div class="psh-ico" style="background:#fff0e0;color:#d97d45">
+            <svg viewBox="0 0 11 11"><path d="M1 9L3 6 5 7.5 8 3 10 5" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 9.5H10" stroke="currentColor" stroke-width="1"/></svg>
+          </div>起点距 · 高程
+        </div><span class="psh-arr">▾</span>
+      </div>
+      <div class="psb open">
+        <!-- 折线图 -->
+        <div id="prof-chart-${rec.id}" style="width:100%;height:120px;margin-bottom:10px;background:var(--s1);border-radius:6px;overflow:hidden;position:relative">
+          ${renderProfileSVG(profile)}
+        </div>
+        <!-- 数据表 -->
+        <div style="max-height:180px;overflow-y:auto;border:1px solid var(--bd);border-radius:6px;margin-bottom:8px">
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr style="background:var(--s1);position:sticky;top:0">
+              <th style="padding:5px 6px;font-size:10px;font-weight:700;color:var(--ink3);text-align:left;border-bottom:1px solid var(--bd)">起点距 (m)</th>
+              <th style="padding:5px 6px;font-size:10px;font-weight:700;color:var(--ink3);text-align:left;border-bottom:1px solid var(--bd)">高程 (m)</th>
+              <th style="width:28px;border-bottom:1px solid var(--bd)"></th>
+            </tr></thead>
+            <tbody id="prof-tbody-${rec.id}">${profRows}</tbody>
+          </table>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="ab" style="flex:1;font-size:11px" onclick="addProfileRow('${rec.id}')">
+            <svg viewBox="0 0 12 12" style="width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2"><path d="M6 2V10M2 6H10" stroke-linecap="round"/></svg>添加数据点
+          </button>
+          <button class="ab" style="flex:1;font-size:11px" onclick="importProfileCSV('${rec.id}')">
+            <svg viewBox="0 0 12 12" style="width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2"><path d="M6 8V2M3.5 5.5L6 8L8.5 5.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 10H10" stroke-linecap="round"/></svg>导入CSV
+          </button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+    // 操作按钮
+  html+=`<div class="ps"><div class="ag" style="flex-direction:column;gap:6px;padding:13px">
+    <button class="ab ab-blue ab-full" onclick="saveProps('${rec.id}','${type}')">
+      <svg viewBox="0 0 12 12"><path d="M2 7L4.5 9.5L10 4" stroke-linecap="round" stroke-linejoin="round"/></svg>保存属性
+    </button>
+    ${type==='river'&&rec.reaches.length>1?`
+    <button class="ab ab-full" onclick="mergeReaches('${rec.id}')" style="border-color:var(--teal);color:var(--teal)" onmouseover="this.style.background='var(--green-l)'" onmouseout="this.style.background=''">
+      <svg viewBox="0 0 12 12" style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M2 6H10M6 3L10 6L6 9"/><path d="M2 3V9" opacity=".4"/></svg>
+      合并全部河段为单一折线（${rec.reaches.length} → 1）
+    </button>`:''}
+    <div style="display:flex;gap:6px">
+      <button class="ab" style="flex:1" onclick="zoomToSel()">
+        <svg viewBox="0 0 12 12"><circle cx="5" cy="5" r="3.5"/><path d="M8 8L11 11" stroke-linecap="round"/></svg>定位
+      </button>
+      <button class="ab ab-del" style="flex:1" onclick="deleteSel()">
+        <svg viewBox="0 0 12 12"><path d="M3 3L9 9M9 3L3 9" stroke-linecap="round"/></svg>删除
+      </button>
+    </div>
+  </div></div>`;
+
+  const content=document.getElementById('props-content');
+  content.innerHTML=html;
+  content.style.display='flex';
+  content.style.flexDirection='column';
+  document.getElementById('props-empty').style.display='none';
+}
+
+// ════════════════════════════════════════════════════════
+//  断面起点距-高程 辅助函数
+// ════════════════════════════════════════════════════════
+function getSection(recId){
+  return proj.sections.find(r=>r.id===recId);
+}
+
+function renderProfileSVG(profile){
+  if(!profile||profile.length<2){
+    return '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#b0b8c8;font-size:12px">暂无数据，请添加数据点</div>';
+  }
+  const W=276, H=110, PAD={l:36,r:8,t:8,b:24};
+  const pw=W-PAD.l-PAD.r, ph=H-PAD.t-PAD.b;
+  const dists=profile.map(p=>+p.dist), elevs=profile.map(p=>+p.elev);
+  const minD=Math.min(...dists), maxD=Math.max(...dists);
+  const minE=Math.min(...elevs), maxE=Math.max(...elevs);
+  const rangeD=maxD-minD||1, rangeE=maxE-minE||1;
+  const sx=d=>(((d-minD)/rangeD)*pw+PAD.l).toFixed(1);
+  const sy=e=>((H-PAD.b)-(((e-minE)/rangeE)*ph)).toFixed(1);
+  const sorted=[...profile].sort((a,b)=>+a.dist-+b.dist);
+  const pts=sorted.map(p=>sx(+p.dist)+','+sy(+p.elev)).join(' ');
+  // 填充区域
+  const fillPts=sx(+sorted[0].dist)+','+(H-PAD.b)+' '+pts+' '+sx(+sorted[sorted.length-1].dist)+','+(H-PAD.b);
+  // Y轴刻度（3个）
+  const yTicks=[0,.5,1].map(t=>{
+    const e=(minE+t*rangeE).toFixed(1);
+    const y=sy(minE+t*rangeE);
+    return `<text x="${PAD.l-4}" y="${+y+4}" text-anchor="end" font-size="9" fill="#8898b0">${e}</text>
+            <line x1="${PAD.l}" y1="${y}" x2="${W-PAD.r}" y2="${y}" stroke="#eef1f6" stroke-width="1"/>`;
+  }).join('');
+  // X轴刻度（首末+中间）
+  const xTicks=[0,.5,1].map(t=>{
+    const d=(minD+t*rangeD).toFixed(0);
+    const x=sx(minD+t*rangeD);
+    return `<text x="${x}" y="${H-PAD.b+14}" text-anchor="middle" font-size="9" fill="#8898b0">${d}</text>`;
+  }).join('');
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="display:block">
+    ${yTicks}${xTicks}
+    <polygon points="${fillPts}" fill="rgba(26,108,255,0.08)"/>
+    <polyline points="${pts}" fill="none" stroke="#1a6cff" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${sorted.map(p=>`<circle cx="${sx(+p.dist)}" cy="${sy(+p.elev)}" r="2.5" fill="#1a6cff"/>`).join('')}
+    <line x1="${PAD.l}" y1="${H-PAD.b}" x2="${W-PAD.r}" y2="${H-PAD.b}" stroke="#c8d0e0" stroke-width="1"/>
+    <line x1="${PAD.l}" y1="${PAD.t}" x2="${PAD.l}" y2="${H-PAD.b}" stroke="#c8d0e0" stroke-width="1"/>
+  </svg>`;
+}
+
+function refreshProfileChart(recId){
+  const sec=getSection(recId); if(!sec) return;
+  const el=document.getElementById('prof-chart-'+recId);
+  if(el) el.innerHTML=renderProfileSVG(sec.attrs.profile||[]);
+}
+
+function addProfileRow(recId){
+  const sec=getSection(recId); if(!sec) return;
+  if(!sec.attrs.profile) sec.attrs.profile=[];
+  const last=sec.attrs.profile[sec.attrs.profile.length-1];
+  const newDist=last?+(last.dist)+10:0;
+  const newElev=last?+(last.elev):0;
+  sec.attrs.profile.push({dist:newDist, elev:newElev});
+  // 追加行到表格
+  const tbody=document.getElementById('prof-tbody-'+recId);
+  if(tbody){
+    const i=sec.attrs.profile.length-1;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td style="padding:3px 6px"><input type="number" step="0.1" value="${newDist}"
+        onchange="updateProfile('${recId}',${i},'dist',this.value)"
+        style="width:72px;border:1px solid var(--bd2);border-radius:3px;padding:2px 5px;font-size:11px;font-family:'JetBrains Mono',monospace"></td>
+      <td style="padding:3px 6px"><input type="number" step="0.01" value="${newElev}"
+        onchange="updateProfile('${recId}',${i},'elev',this.value)"
+        style="width:72px;border:1px solid var(--bd2);border-radius:3px;padding:2px 5px;font-size:11px;font-family:'JetBrains Mono',monospace"></td>
+      <td style="padding:3px 6px;text-align:center">
+        <button onclick="removeProfileRow('${recId}',${i})"
+          style="width:18px;height:18px;border:none;border-radius:3px;background:var(--red-l);color:var(--red);cursor:pointer;font-size:11px;line-height:1">✕</button>
+      </td>`;
+    tbody.appendChild(tr);
+  }
+  refreshProfileChart(recId);
+}
+
+function removeProfileRow(recId, idx){
+  const sec=getSection(recId); if(!sec||!sec.attrs.profile) return;
+  sec.attrs.profile.splice(idx,1);
+  // 重建属性面板（行号索引需重置）
+  if(selectedRec&&selectedRec.id===recId){
+    buildPropsPanel(selectedRec,'section');
+  }
+}
+
+function updateProfile(recId, idx, field, val){
+  const sec=getSection(recId); if(!sec||!sec.attrs.profile) return;
+  if(sec.attrs.profile[idx]) sec.attrs.profile[idx][field]=parseFloat(val)||0;
+  refreshProfileChart(recId);
+}
+
+function importProfileCSV(recId){
+  const input=document.createElement('input');
+  input.type='file'; input.accept='.csv,.txt';
+  input.onchange=function(e){
+    const file=e.target.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=function(ev){
+      const lines=ev.target.result.split(/\r?\n/).filter(l=>l.trim());
+      const sec=getSection(recId); if(!sec) return;
+      const pts=[];
+      lines.forEach(line=>{
+        const parts=line.split(/[,\t\s]+/);
+        if(parts.length>=2){
+          const d=parseFloat(parts[0]), el=parseFloat(parts[1]);
+          if(!isNaN(d)&&!isNaN(el)) pts.push({dist:d,elev:el});
+        }
+      });
+      if(pts.length){
+        sec.attrs.profile=pts;
+        if(selectedRec&&selectedRec.id===recId) buildPropsPanel(selectedRec,'section');
+        notify('导入 '+pts.length+' 个数据点','ok');
+      } else {
+        notify('未识别到有效数据（格式：起点距,高程）','warn');
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+// saveProps 时也保存 profile（profile 通过 updateProfile 实时写入 rec.attrs，无需额外处理）
+
+
+function saveProps(recId, type){
+  let rec;
+  if(type==='river') rec=proj.rivers.find(r=>r.id===recId);
+  else rec=[...proj.banks,...proj.sections,...proj.structures].find(r=>r.id===recId);
+  if(!rec){notify('要素不存在','err');return;}
+  SCHEMA[type]?.forEach(f=>{
+    const el=document.getElementById('pf-'+f.key);
+    if(el&&!f.ro) rec.attrs[f.key]=el.value;
+  });
+  notify(`「${rec.attrs.name}」属性已保存`,'ok');
+  addLog('lok',`属性保存：${rec.attrs.name}`);
+}
+
+function zoomToReach(riverId, idx){
+  const river=proj.rivers.find(r=>r.id===riverId);
+  if(!river||!river.reaches[idx]) return;
+  river.reaches[idx].leaflet.bringToFront();
+  map.fitBounds(river.reaches[idx].leaflet.getBounds(),{padding:[60,60]});
+}
+
+function deleteReach(riverId, idx){
+  const river=proj.rivers.find(r=>r.id===riverId);
+  if(!river||!river.reaches[idx]) return;
+  const reach=river.reaches[idx];
+  lg.river.removeLayer(reach.leaflet);
+  river.reaches.splice(idx,1);
+  updateRiverStats(river);
+  if(river.reaches.length===0){
+    // 河道没有河段了，删除河道
+    proj.rivers=proj.rivers.filter(r=>r.id!==riverId);
+    deselect();
+  } else {
+    buildPropsPanel(river,'river');  // 刷新面板
+  }
+  updateStats();notify('河段已删除','info');
+}
+
+function mergeReaches(riverId){
+  const river = proj.rivers.find(r=>r.id===riverId);
+  if(!river){notify('河道不存在','err');return;}
+  if(river.reaches.length<=1){notify('该河道只有1个河段，无需合并','info');return;}
+
+  // ── 拓扑排序：将河段首尾相连，组成有序的节点序列 ────────────────
+  // 算法：
+  //   1. 将所有河段放入 pool
+  //   2. 以第一段为基础，反复从 pool 中找首/末点能衔接的下一段
+  //   3. 公差 MERGE_TOL（米）用于判断端点是否相同
+  const MERGE_TOL = 2.0;  // 端点距离容差，2m 以内视为相同点
+  const pool = river.reaches.slice();  // 浅拷贝
+  const ordered = [pool.shift()];      // 第一段作为起始
+
+  let changed = true;
+  while(pool.length > 0 && changed){
+    changed = false;
+    const tail = ordered[ordered.length-1];
+    const tailEnd   = tail.coords[tail.coords.length-1];      // 当前序列末点
+    const headStart = ordered[0].coords[0];                    // 当前序列首点
+
+    for(let i=0;i<pool.length;i++){
+      const seg   = pool[i];
+      const segS  = seg.coords[0];
+      const segE  = seg.coords[seg.coords.length-1];
+
+      const dTailToSegStart = L.latLng(tailEnd.lat,tailEnd.lng).distanceTo(L.latLng(segS.lat,segS.lng));
+      const dTailToSegEnd   = L.latLng(tailEnd.lat,tailEnd.lng).distanceTo(L.latLng(segE.lat,segE.lng));
+      const dSegEndToHead   = L.latLng(segE.lat,segE.lng).distanceTo(L.latLng(headStart.lat,headStart.lng));
+      const dSegStartToHead = L.latLng(segS.lat,segS.lng).distanceTo(L.latLng(headStart.lat,headStart.lng));
+
+      if(dTailToSegStart < MERGE_TOL){
+        // 顺接：segS ≈ tailEnd → 追加到末尾（跳过重复首点）
+        ordered.push({coords: seg.coords.slice(1), leaflet:seg.leaflet});
+        pool.splice(i,1); changed=true; break;
+      } else if(dTailToSegEnd < MERGE_TOL){
+        // 反向接：segE ≈ tailEnd → 将该段反向后追加
+        ordered.push({coords: [...seg.coords].reverse().slice(1), leaflet:seg.leaflet});
+        pool.splice(i,1); changed=true; break;
+      } else if(dSegEndToHead < MERGE_TOL){
+        // 该段末接头部：前插（跳过重复末点）
+        ordered.unshift({coords: seg.coords.slice(0,-1), leaflet:seg.leaflet});
+        pool.splice(i,1); changed=true; break;
+      } else if(dSegStartToHead < MERGE_TOL){
+        // 该段首接头部（反向）：前插
+        ordered.unshift({coords: [...seg.coords].reverse().slice(0,-1), leaflet:seg.leaflet});
+        pool.splice(i,1); changed=true; break;
+      }
+    }
+  }
+
+  if(pool.length > 0){
+    notify(`有 ${pool.length} 个河段无法连通，请确认各河段已首尾相连`, 'warn');
+    addLog('lw', `合并失败：${pool.length} 个河段未连通`);
+    return;
+  }
+
+  // ── 合并坐标数组 ──────────────────────────────────────────────────
+  const mergedCoords = [];
+  // 先加入第一段全部点
+  mergedCoords.push(...ordered[0].coords);
+  // 后续段跳过已记录的连接点（ordered 已经做了 slice(1) 处理）
+  for(let i=1;i<ordered.length;i++){
+    mergedCoords.push(...ordered[i].coords);
+  }
+
+  // ── 移除所有旧 Leaflet polylines ─────────────────────────────────
+  river.reaches.forEach(r=>{lg.river.removeLayer(r.leaflet);});
+
+  // ── 创建合并后的单一 polyline ────────────────────────────────────
+  const latLngs = mergedCoords.map(c=>L.latLng(c.lat,c.lng));
+  const newPl   = L.polyline(latLngs, {...REACH_STYLE}).addTo(lg.river);
+  const newReachId = `reach_merged_${Date.now()}`;
+  const newReach   = {
+    id: newReachId,
+    coords: mergedCoords,
+    leaflet: newPl,
+    riverRef: river
+  };
+  newPl.on('click', e=>{
+    L.DomEvent.stopPropagation(e);
+    if(currentTool==='select') selectRiver(river, newPl);
+  });
+
+  // ── 替换河段数组 ──────────────────────────────────────────────────
+  river.reaches = [newReach];
+  // 从 undoStack 中清除该河道的旧河段记录（合并后不可逐段撤销）
+  undoStack = undoStack.filter(u=> !(u.kind==='reach' && u.river===river));
+  // 加入合并操作的撤销记录
+  undoStack.push({kind:'reach', reach:newReach, river, leaflet:newPl});
+
+  updateRiverStats(river);
+  updateStats();
+
+  // 重新高亮并刷新属性面板
+  if(selectedRec===river){
+    newPl.setStyle({color:'#ffd600',weight:5,opacity:1,dashArray:null});
+    newPl.bringToFront();
+    buildPropsPanel(river,'river');
+  }
+
+  const totalPts = mergedCoords.length;
+  let totalLen=0;
+  for(let i=1;i<mergedCoords.length;i++)
+    totalLen+=L.latLng(mergedCoords[i-1].lat,mergedCoords[i-1].lng).distanceTo(L.latLng(mergedCoords[i].lat,mergedCoords[i].lng));
+
+  notify(`「${river.attrs.name}」已合并为单一折线（${totalPts} 节点，${totalLen>1000?(totalLen/1000).toFixed(2)+'km':totalLen.toFixed(0)+'m'}）`,'ok');
+  addLog('lok',`合并河段→单一折线：[${river.attrs.name}] pts=${totalPts} L=${totalLen.toFixed(0)}m`);
+}
+
+
+function zoomToSel(){
+  if(!selectedRec) return;
+  if(selectedRec.reaches){
+    const b=L.latLngBounds();
+    selectedRec.reaches.forEach(r=>r.coords.forEach(c=>b.extend([c.lat,c.lng])));
+    if(b.isValid()) map.fitBounds(b,{padding:[60,60]});
+  } else if(selectedLeaflet){
+    map.fitBounds(selectedLeaflet.getBounds(),{padding:[60,60]});
+  }
+}
+
+function deleteSel(){
+  if(!selectedRec) return;
+  if(selectedRec.reaches){
+    // 删除整条河道（所有河段）
+    selectedRec.reaches.forEach(r=>lg.river.removeLayer(r.leaflet));
+    proj.rivers=proj.rivers.filter(r=>r.id!==selectedRec.id);
+  } else {
+    const t=selectedRec.type;
+    lg[t].removeLayer(selectedLeaflet);
+    proj[t+'s']=proj[t+'s'].filter(r=>r.id!==selectedRec.id);
+  }
+  const name=selectedRec.attrs?.name||'要素';
+  selectedRec=null; selectedLeaflet=null;
+  document.getElementById('props-empty').style.display='flex';
+  document.getElementById('props-content').style.display='none';
+  updateStats();notify(`「${name}」已删除`,'info');
+}
+
+// ════════════════════════════════════════════════════════
+//  LAYER CONTROL
+// ════════════════════════════════════════════════════════
+function toggleLG(n,show){if(show)lg[n].addTo(map);else map.removeLayer(lg[n]);}
+
+function clearLG(n){
+  deselect();
+  if(n==='river'){ proj.rivers=[]; lg.river.clearLayers(); }
+  else { lg[n].clearLayers(); proj[n+'s']=[]; }
+  updateStats(); notify((TN[n]||n)+'图层已清空','info');
+}
+function undoLast(){
+  if(!undoStack.length){notify('无可撤销操作','warn');return;}
+  const u=undoStack.pop();
+  if(u.kind==='reach'){
+    lg.river.removeLayer(u.leaflet);
+    const idx=u.river.reaches.indexOf(u.reach);
+    if(idx>-1) u.river.reaches.splice(idx,1);
+    if(u.river.reaches.length===0){
+      proj.rivers=proj.rivers.filter(r=>r.id!==u.river.id);
+    } else {
+      updateRiverStats(u.river);
+    }
+  } else if(u.kind==='split'){
+    // 撤销：移除两条新河道，恢复原河道+原河段
+    if(selectedRec===u.river1||selectedRec===u.river2) deselect();
+    lg.river.removeLayer(u.nr1.leaflet);
+    lg.river.removeLayer(u.nr2.leaflet);
+    proj.rivers=proj.rivers.filter(r=>r.id!==u.river1.id&&r.id!==u.river2.id);
+    proj.rivers.push(u.oldRiver);
+    const oldPl=L.polyline(u.oldReach.coords.map(c=>L.latLng(c.lat,c.lng)),{...REACH_STYLE}).addTo(lg.river);
+    u.oldReach.leaflet=oldPl;
+    oldPl.on('click',e=>{L.DomEvent.stopPropagation(e);if(currentTool==='select')selectRiver(u.oldRiver,oldPl);});
+    u.oldRiver.reaches=[u.oldReach];
+    updateRiverStats(u.oldRiver);
+  } else if(u.kind==='split_partial'){
+    // 撤销：移除新河道，恢复被分割河段到原河道
+    if(selectedRec===u.newRiver) deselect();
+    lg.river.removeLayer(u.nr1.leaflet);
+    lg.river.removeLayer(u.nr2.leaflet);
+    u.oldRiver.reaches=u.oldRiver.reaches.filter(r=>r.id!==u.nr1.id);
+
+    // split_partial 过程中可能把“其余河段”重分配到 newRiver，撤销时需要搬回 oldRiver。
+    (u.movedReaches||[]).forEach(r=>{
+      if(!u.oldRiver.reaches.find(x=>x.id===r.id)) u.oldRiver.reaches.push(r);
+      r.riverRef=u.oldRiver;
+      r.leaflet.off('click');
+      r.leaflet.on('click',e=>{L.DomEvent.stopPropagation(e);if(currentTool==='select')selectRiver(u.oldRiver,r.leaflet);});
+    });
+
+    proj.rivers=proj.rivers.filter(r=>r.id!==u.newRiver.id);
+    const oldPl=L.polyline(u.oldReach.coords.map(c=>L.latLng(c.lat,c.lng)),{...REACH_STYLE}).addTo(lg.river);
+    u.oldReach.leaflet=oldPl;
+    oldPl.on('click',e=>{L.DomEvent.stopPropagation(e);if(currentTool==='select')selectRiver(u.oldRiver,oldPl);});
+    u.oldRiver.reaches.push(u.oldReach);
+    updateRiverStats(u.oldRiver);
+  } else if(u.kind==='split_node'){
+    // 撤销：节点拆分产生的新河道，全部并回 hostRiver（不改几何，只回收归属）
+    if((u.movedGroups||[]).some(g=>selectedRec===g.river)) deselect();
+    const rmIds=new Set((u.movedGroups||[]).map(g=>g.river.id));
+    proj.rivers=proj.rivers.filter(r=>!rmIds.has(r.id));
+    (u.movedGroups||[]).forEach(g=>{
+      g.reaches.forEach(r=>{
+        if(!u.hostRiver.reaches.find(x=>x.id===r.id)) u.hostRiver.reaches.push(r);
+        r.riverRef=u.hostRiver;
+        r.leaflet.off('click');
+        r.leaflet.on('click',e=>{L.DomEvent.stopPropagation(e);if(currentTool==='select')selectRiver(u.hostRiver,r.leaflet);});
+      });
+    });
+    updateRiverStats(u.hostRiver);
+  } else {
+    if(selectedRec===u.rec) deselect();
+    u.layer.removeLayer(u.leaflet);
+    const i=u.arr.indexOf(u.rec);if(i>-1)u.arr.splice(i,1);
+  }
+  updateStats();notify('已撤销','info');
+}
+
+// ════════════════════════════════════════════════════════
+//  STATS
+// ════════════════════════════════════════════════════════
+function updateStats(){
+  const rivers=proj.rivers.length;
+  const reaches=proj.rivers.reduce((s,r)=>s+r.reaches.length,0);
+  const sections=proj.sections.length;
+  const nodes=proj.nodes.length;
+  document.getElementById('sv-r').textContent=rivers;
+  document.getElementById('sv-reach').textContent=reaches;
+  document.getElementById('sv-s').textContent=sections;
+  document.getElementById('sv-n').textContent=nodes;
+  document.getElementById('lm-r').textContent=`${rivers} 条河道 · ${reaches} 个河段`;
+  document.getElementById('lm-b').textContent=`${proj.banks.length} 条 · 多节点折线`;
+  document.getElementById('lm-s').textContent=`${sections} 个 · 两点完成`;
+  document.getElementById('lm-st').textContent=`${proj.structures.length} 个 · 两点完成`;
+  document.getElementById('lm-n').textContent=`${nodes} 个 · 河道首末端点`;
+}
+
+// ════════════════════════════════════════════════════════
+//  TOPO：节点 = 河道的首末端
+//
+//  定义：河道由多个首尾相连的河段组成。
+//    - 河道首端（上游节点）：在该河道所有河段端点中，
+//      只作为"起点"出现、不作为任何其他河段"末点"的端点。
+//    - 河道末端（下游节点）：只作为"末点"、不接续其他河段的端点。
+//  简化实现：
+//    1. 收集河道内所有河段的首点、末点
+//    2. "孤立端点" = 该点与其他河段的任意端点距离均 > tol（未被连接）
+//    3. 孤立端点中取距离最远的两个作为上下游节点
+//    4. 若河道只有1段，首点为上游、末点为下游
+// ════════════════════════════════════════════════════════
+function autoGenNodes(silent=false){
+  const tol = parseFloat(document.getElementById('topo-tol').value)||1;
+  lg.nodes.clearLayers();
+  proj.nodes = [];
+  let cnt = 0;
+
+  // ── 第一步：每条河道找悬挂端（该河道的首/末对外端点）─────────
+  // 收集所有候选节点（去重后）
+  const allNodes = []; // [{lat,lng,rivers:[],label:''}]
+
+  proj.rivers.forEach(river=>{
+    if(!river.reaches.length) return;
+
+    // 对外端点：每条 reach 的首点如果不是任何其他 reach 的末点 → 上游悬挂端
+    //            每条 reach 的末点如果不是任何其他 reach 的首点 → 下游悬挂端
+    // 用坐标值严格比较（精度1e-8度，约1mm），完全不依赖距离容差
+    const innerTol = Math.max(tol, 50); // 保留供 allNodes 合并使用
+    function coordEq(a, b){
+      return Math.abs(a.lat-b.lat)<1e-8 && Math.abs(a.lng-b.lng)<1e-8;
+    }
+    const startPts = river.reaches.map(r=>r.coords[0]);
+    const endPts   = river.reaches.map(r=>r.coords[r.coords.length-1]);
+
+    // 上游悬挂端：某 reach 的起点不出现在任何其他 reach 的末点中
+    const upstreamEnds = startPts.filter(sp=>
+      !endPts.some(ep=>coordEq(sp,ep))
+    );
+    // 下游悬挂端：某 reach 的末点不出现在任何其他 reach 的起点中
+    const downstreamEnds = endPts.filter(ep=>
+      !startPts.some(sp=>coordEq(ep,sp))
+    );
+
+    // 去重（同坐标只保留一个）
+    const unique = [];
+    [...upstreamEnds, ...downstreamEnds].forEach(c=>{
+      if(!unique.find(u=>coordEq(u.c,c)))
+        unique.push({c});
+    });
+
+    // 确定上/下游方向（以首段首点为参考）
+    const firstPt = river.reaches[0].coords[0];
+    let pairs = [];
+    if(unique.length===2){
+      const d0=L.latLng(unique[0].c.lat,unique[0].c.lng).distanceTo(L.latLng(firstPt.lat,firstPt.lng));
+      const d1=L.latLng(unique[1].c.lat,unique[1].c.lng).distanceTo(L.latLng(firstPt.lat,firstPt.lng));
+      pairs = d0<=d1
+        ? [{c:unique[0].c,label:'上游'},{c:unique[1].c,label:'下游'}]
+        : [{c:unique[1].c,label:'上游'},{c:unique[0].c,label:'下游'}];
+    } else {
+      unique.forEach((ep,i)=>pairs.push({c:ep.c, label:i===0?'上游':'下游'}));
+    }
+
+    // 将每个悬挂端加入 allNodes（若坐标已存在则合并）
+    // 同时记录每个节点的上游连接数(nUp)和下游连接数(nDown)，用于判断真正的汊点
+    pairs.forEach(({c,label})=>{
+      const existing = allNodes.find(n=>
+        L.latLng(n.lat,n.lng).distanceTo(L.latLng(c.lat,c.lng)) < innerTol
+      );
+      if(existing){
+        if(!existing.rivers.includes(river.id)) existing.rivers.push(river.id);
+        // 记录方向计数
+        if(label==='上游') existing.nUp=(existing.nUp||0)+1;
+        else               existing.nDown=(existing.nDown||0)+1;
+        if(label==='上游') river.attrs.from = existing.id;
+        else               river.attrs.to   = existing.id;
+      } else {
+        cnt++;
+        const nd = {id:`N${cnt}`, lat:c.lat, lng:c.lng,
+                    label, rivers:[river.id],
+                    nUp:(label==='上游'?1:0), nDown:(label==='下游'?1:0)};
+        allNodes.push(nd);
+        if(label==='上游') river.attrs.from = nd.id;
+        else               river.attrs.to   = nd.id;
+      }
+    });
+  });  // end proj.rivers.forEach
+
+  // ── 第二步：修正 label，确定每个节点类型 ────────────────────────
+  allNodes.forEach(nd=>{
+    const nUp   = nd.nUp   || 0;
+    const nDown = nd.nDown || 0;
+    const nRivers = nd.rivers.length;
+    if(nRivers === 1){
+      // 单条河道的悬挂端：保持原有 label（上游/下游）
+    } else if(nUp >= 2 || nDown >= 2 || nRivers >= 3){
+      // 真正汊点：多条河道同向汇入，或3条以上共用
+      nd.label = '汊点';
+    } else {
+      // nUp==1 && nDown==1：一条河道的下游端 = 另一条河道的上游端
+      // 这是简单串联，不是汊点，隐藏节点
+      nd.label = '_hidden';
+    }
+  });
+
+  // ── 第三步：统一绘制所有节点（颜色由最终 label 决定）──────────
+  allNodes.forEach(nd=>{
+    if(nd.label === '_hidden') return; // 串联连接点，不显示
+    proj.nodes.push(nd);
+    const ns=layerSettings.nodes;
+    const color = nd.label==='汊点'  ? ns.colorJunction
+                : nd.label==='上游'  ? ns.colorUpstream
+                :                      ns.colorDownstream;
+    const radius = nd.label==='汊点' ? Math.round(ns.radius*1.3) : ns.radius;
+    const tip = nd.label==='汊点'
+      ? `<b>${nd.id}</b> · 汊点<br><span style="font-size:11px;color:#8898b0">${nd.rivers.map(rid=>{const r=proj.rivers.find(x=>x.id===rid);return r?r.attrs.name:rid;}).join(' / ')}</span>`
+      : `<b>${nd.id}</b> · ${nd.label}<br><span style="font-size:11px;color:#8898b0">${nd.rivers.map(rid=>{const r=proj.rivers.find(x=>x.id===rid);return r?r.attrs.name:rid;}).join(' / ')}</span>`;
+    L.circleMarker([nd.lat,nd.lng],{
+      radius, color, fillColor:'#fff', fillOpacity:1, weight:2.5
+    }).bindTooltip(tip,{direction:'top'}).addTo(lg.nodes);
+  });
+
+  updateStats();
+  const junctions = allNodes.filter(n=>n.label==='汊点').length;
+  if(!silent){
+    notify(`生成 ${allNodes.length} 个节点（🟢上游 ${allNodes.filter(n=>n.label==='上游').length} · 🔴下游 ${allNodes.filter(n=>n.label==='下游').length} · 🟣汊点 ${junctions}）`,'ok');
+  }
+  addLog('lok',`节点：${allNodes.length} 个（${proj.rivers.length} 条河道，${junctions} 个汊点）`);
+
+  // 刷新节点标注（根据样式设置）
+  refreshLabels('nodes');
+
+  // 同步节点名称到河道 attrs（供属性面板显示）
+  proj.rivers.forEach(river=>{
+    river.attrs.fromName = river.attrs.from || '--';
+    river.attrs.toName   = river.attrs.to   || '--';
+  });
+}
+
+
+function checkTopo(){
+  if(!proj.rivers.length){notify('请先绘制河道','warn');return;}
+  const iss=[];
+  proj.rivers.forEach(r=>{
+    if(!r.reaches.length) iss.push(`· 河道「${r.attrs.name}」无河段`);
+  });
+  if(!proj.sections.length) iss.push('· 未绘制横断面');  // 岸线为可选项，不强制要求
+  if(!proj.nodes.length)    iss.push('· 未生成节点');
+  const el=document.getElementById('topo-result');
+  if(!iss.length){
+    el.innerHTML=`<div class="ibox ibox-green" style="margin-top:8px">✓ 拓扑检查通过（${proj.rivers.length}条河道，${proj.rivers.reduce((s,r)=>s+r.reaches.length,0)}段）</div>`;
+    notify('检查通过','ok');
+  } else {
+    el.innerHTML=`<div class="ibox ibox-amber" style="margin-top:8px">${iss.join('<br>')}</div>`;
+    notify(iss.length+' 个问题','warn');
+  }
+}
+
+
+// ════════════════════════════════════════════════════════
+//  拓扑关系生成
+//  1. 断面：计算里程（到所属河道首端的距离）+ 匹配所属河道/河段
+//  2. 岸线（可选）：匹配最近的河道
+//  3. 建筑物（可选）：匹配最近的河道 + 计算里程
+// ════════════════════════════════════════════════════════
+function buildTopology(){
+  if(!proj.rivers.length){notify('请先绘制河道','warn');return;}
+
+  // 岸线/建筑物有则匹配，无则跳过（无强制要求）
+  const hasStructure = proj.structures.length>0;
+  let log=[];
+
+  // ── 工具函数 ──────────────────────────────────────────────
+  // 点到折线的最近距离 + 投影里程
+  function ptToPolyline(latLng, coords){
+    let bestDist=Infinity, bestStation=0, cumLen=0;
+    for(let i=0;i<coords.length-1;i++){
+      const A=L.latLng(coords[i].lat,coords[i].lng);
+      const B=L.latLng(coords[i+1].lat,coords[i+1].lng);
+      const segLen=A.distanceTo(B);
+      const abLat=B.lat-A.lat, abLng=B.lng-A.lng;
+      const len2=abLat*abLat+abLng*abLng;
+      let t=0;
+      if(len2>1e-20){
+        t=((latLng.lat-A.lat)*abLat+(latLng.lng-A.lng)*abLng)/len2;
+        t=Math.max(0,Math.min(1,t));
+      }
+      const footLat=A.lat+t*abLat, footLng=A.lng+t*abLng;
+      const d=latLng.distanceTo(L.latLng(footLat,footLng));
+      if(d<bestDist){
+        bestDist=d;
+        bestStation=cumLen+t*segLen;
+      }
+      cumLen+=segLen;
+    }
+    return {dist:bestDist, station:bestStation, totalLen:cumLen};
+  }
+
+  // 获取河道所有河段连通后的完整坐标序列（首尾相连排序）
+  function getRiverCoords(river){
+    if(!river.reaches.length) return [];
+    // 简单拼接（已假设河段首尾相连）
+    const all=[];
+    river.reaches.forEach((reach,ri)=>{
+      if(ri===0) all.push(...reach.coords);
+      else all.push(...reach.coords.slice(1)); // 跳过重复的连接点
+    });
+    return all;
+  }
+
+  // ── 1. 断面：匹配所属河道 + 计算里程 ─────────────────────
+  let sectionCount=0;
+  proj.sections.forEach(sec=>{
+    if(!sec.leaflet) return;
+    const lls=sec.leaflet.getLatLngs();
+    if(!lls||!lls.length) return;
+    // 取断面中点作为参考点
+    const midLL=lls[Math.floor(lls.length/2)];
+
+    let bestRiver=null, bestReach=null, bestDist=Infinity, bestStation=0;
+
+    proj.rivers.forEach(river=>{
+      river.reaches.forEach(reach=>{
+        const res=ptToPolyline(midLL, reach.coords);
+        if(res.dist<bestDist){
+          bestDist=res.dist;
+          bestRiver=river;
+          bestReach=reach;
+          // 计算到整条河道首端的累积里程
+          let stationOffset=0;
+          for(let ri=0;ri<river.reaches.length;ri++){
+            if(river.reaches[ri]===reach){ bestStation=stationOffset+res.station; break; }
+            let len=0;
+            for(let i=1;i<river.reaches[ri].coords.length;i++)
+              len+=L.latLng(river.reaches[ri].coords[i-1].lat,river.reaches[ri].coords[i-1].lng)
+                    .distanceTo(L.latLng(river.reaches[ri].coords[i].lat,river.reaches[ri].coords[i].lng));
+            stationOffset+=len;
+          }
+        }
+      });
+    });
+
+    if(bestRiver){
+      sec.attrs.hydroId_river = bestRiver.attrs.hydroId;
+      sec.attrs.river_name    = bestRiver.attrs.name;
+      sec.attrs.reachId       = bestReach?bestReach.hydroId:'';
+      sec.attrs.reach_name    = bestReach?bestReach.name:'';
+      if(!sec.attrs.station || sec.attrs.station==='' || sec.attrs.station==='0'){
+        sec.attrs.station = bestStation.toFixed(1);
+      }
+      sectionCount++;
+    }
+  });
+  log.push('断面：'+sectionCount+' 个已匹配河道+里程');
+
+  // ── 2. 岸线：匹配最近河道（有则匹配，无则跳过）────────────
+  if(proj.banks.length>0){
+    let bankCount=0;
+    proj.banks.forEach(bank=>{
+      if(!bank.leaflet) return;
+      const lls=bank.leaflet.getLatLngs();
+      if(!lls||!lls.length) return;
+      const midLL=lls[Math.floor(lls.length/2)];
+      let bestRiver=null, bestDist=Infinity;
+      proj.rivers.forEach(river=>{
+        river.reaches.forEach(reach=>{
+          const res=ptToPolyline(midLL,reach.coords);
+          if(res.dist<bestDist){bestDist=res.dist;bestRiver=river;}
+        });
+      });
+      if(bestRiver){bank.attrs.hydroId=bestRiver.attrs.hydroId;bank.attrs.hydroId_river=bestRiver.attrs.hydroId;bankCount++;}
+    });
+    log.push('岸线：'+bankCount+' 条已匹配河道');
+  }
+
+  // ── 3. 建筑物：匹配最近河道 + 里程（仅当建筑物存在时）────────
+  if(hasStructure){
+    let strCount=0;
+    proj.structures.forEach(st=>{
+      if(!st.leaflet) return;
+      const lls=st.leaflet.getLatLngs();
+      if(!lls||!lls.length) return;
+      const midLL=lls[Math.floor(lls.length/2)];
+      let bestRiver=null, bestDist=Infinity, bestStation=0;
+      proj.rivers.forEach(river=>{
+        river.reaches.forEach((reach,ri)=>{
+          const res=ptToPolyline(midLL,reach.coords);
+          if(res.dist<bestDist){
+            bestDist=res.dist; bestRiver=river;
+            let off=0;
+            for(let k=0;k<ri;k++){
+              for(let i=1;i<river.reaches[k].coords.length;i++)
+                off+=L.latLng(river.reaches[k].coords[i-1].lat,river.reaches[k].coords[i-1].lng)
+                      .distanceTo(L.latLng(river.reaches[k].coords[i].lat,river.reaches[k].coords[i].lng));
+            }
+            bestStation=off+res.station;
+          }
+        });
+      });
+      if(bestRiver){
+        st.attrs.hydroId=bestRiver.attrs.hydroId;
+        if(!st.attrs.station||st.attrs.station==='') st.attrs.station=bestStation.toFixed(1);
+        strCount++;
+      }
+    });
+    log.push('建筑物：'+strCount+' 个已匹配河道+里程');
+  }
+
+  // 汇总
+  notify('拓扑关系生成完成','ok');
+  log.forEach(l=>addLog('lok',l));
+  addLog('lok','拓扑生成：'+log.join(' · '));
+
+  // 刷新选中的属性面板
+  if(selectedRec) buildPropsPanel(selectedRec, selectedRec.type||'section');
+}
+
+
+function showTopoRpt(){
+  const reaches=proj.rivers.reduce((s,r)=>s+r.reaches.length,0);
+  const data=[
+    ['河道',proj.rivers.length,'条'],
+    ['河段',reaches,'个'],
+    ['岸线',proj.banks.length,'条'],
+    ['横断面',proj.sections.length,'个'],
+    ['建筑物',proj.structures.length,'个'],
+    ['拓扑节点',proj.nodes.length,'个（河道首末端）']
+  ];
+  document.getElementById('topo-rpt').innerHTML=`<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="background:var(--s1)">${['类型','数量','状态'].map(h=>`<th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--ink3)">${h}</th>`).join('')}</tr></thead>
+    <tbody>${data.map(([n,v,u],i)=>`<tr style="${i%2?'background:var(--s1)':''}">
+      <td style="padding:7px 10px;font-size:12px">${n}</td>
+      <td style="padding:7px 10px;font-size:12px;font-weight:600">${v} <span style="color:#8898b0;font-weight:400">${u}</span></td>
+      <td style="padding:7px 10px">${v>0?'<span style="color:var(--teal);font-size:11px">✓</span>':'<span style="color:var(--amber);font-size:11px">⚠</span>'}</td>
+    </tr>`).join('')}</tbody>
+  </table>
+  <div style="margin-top:12px;font-size:11.5px;color:#8898b0;line-height:1.7">
+    <b style="color:var(--ink3)">说明：</b>节点 = 河道首/末端点，不同于河段端点。
+    多条河道共享同一节点时，该节点为汇流/分叉点。
+  </div>`;
+  showModal('modal-topo');
+}
+
+// ════════════════════════════════════════════════════════
+//  VIEW
+// ════════════════════════════════════════════════════════
+function fitAll(){
+  const b=L.latLngBounds();
+  Object.values(lg).forEach(g=>g.eachLayer(l=>{
+    const lls=l.getLatLngs?l.getLatLngs():null;
+    if(lls)(Array.isArray(lls[0])?lls.flat():lls).forEach(p=>b.extend(p));
+  }));
+  if(b.isValid())map.fitBounds(b,{padding:[40,40]});else notify('暂无要素','warn');
+}
+function locateMe(){
+  map.locate({setView:true,maxZoom:14});
+  map.once('locationfound',()=>notify('已定位','ok'));
+  map.once('locationerror',()=>notify('定位失败','err'));
+}
+
+// ════════════════════════════════════════════════════════
+//  UI HELPERS
+// ════════════════════════════════════════════════════════
+function switchRTab(n){
+  ['build','props','params','compute'].forEach(t=>{
+    const el=document.getElementById('tab-'+t);
+    if(el){el.style.display=t===n?'flex':'none';if(t===n)el.style.flexDirection='column';}
+    document.getElementById('rt-'+t)?.classList.toggle('active',t===n);
+  });
+}
+function setSB(n){
+  document.querySelectorAll('.sb-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('sb-'+n)?.classList.add('active');
+  if(n==='compute')switchRTab('compute');
+  else if(n==='project'||n==='params')switchRTab('params');
+  else switchRTab('build');
+}
+function togglePS(hd){hd.classList.toggle('open');hd.nextElementSibling.classList.toggle('open');}
+function selRO(el,gid){document.getElementById(gid).querySelectorAll('.ro').forEach(r=>r.classList.remove('sel'));el.classList.add('sel');}
+function toggleSnap(){
+  snapEnabled=!snapEnabled;
+  const b=document.getElementById('btn-snap');
+  b.style.color=snapEnabled?'rgba(255,255,255,.85)':'rgba(255,255,255,.3)';
+  notify(snapEnabled?'节点捕捉启用':'节点捕捉关闭',snapEnabled?'ok':'info');
+}
+function saveProj(){proj.name=document.getElementById('p-name').value;proj.crs=document.getElementById('p-crs').value;proj.desc=document.getElementById('p-desc').value;notify('已保存','ok');}
+function showModal(id){document.getElementById(id).classList.add('show');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+function doExport(fmt){closeModal('modal-export');notify('导出 '+{shp:'Shapefile',geojson:'GeoJSON',dxf:'DXF',csv:'CSV',hecras:'HEC-RAS g01',proj:'项目文件'}[fmt]+'（演示）','info');addLog('ls','导出 '+fmt);}
+function runDensify(){
+  const reaches=proj.rivers.reduce((s,r)=>s+r.reaches.length,0);
+  if(!proj.rivers.length||!proj.sections.length){notify('需要河道+断面','warn');return;}
+  const ds=parseFloat(document.getElementById('ds-ds').value)||100;
+  notify(`断面加密 ds=${ds}m（${proj.rivers.length}条河道，${reaches}段）…`,'info');
+  addLog('ls',`断面加密 ds=${ds}m`);
+  setTimeout(()=>{notify('加密完成（演示）','ok');addLog('lok','加密完成');},700);
+}
+function runSim(){
+  if(simTimer){clearInterval(simTimer);simTimer=null;}
+  const dot=document.getElementById('sim-dot'),bar=document.getElementById('sim-bar'),pct=document.getElementById('sim-pct'),st=document.getElementById('sim-st');
+  dot.className='prog-dot run';bar.style.width='0%';pct.textContent='0%';st.textContent='计算中…';
+  addLog('ls','开始计算');let p=0;
+  simTimer=setInterval(()=>{p+=Math.random()*2.5+0.8;if(p>=100){p=100;clearInterval(simTimer);simTimer=null;dot.className='prog-dot done';st.textContent='完成 ✓';notify('计算完成','ok');addLog('lok','完成');}bar.style.width=p+'%';pct.textContent=Math.round(p)+'%';},160);
+}
+function stopSim(){if(simTimer){clearInterval(simTimer);simTimer=null;}document.getElementById('sim-dot').className='prog-dot';document.getElementById('sim-st').textContent='已暂停';notify('已暂停','warn');}
+function addLog(cls,msg){const box=document.getElementById('log-box');const t=new Date();const ts=[t.getHours(),t.getMinutes(),t.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':');const li=document.createElement('div');li.className='ll';li.innerHTML=`<span class="lt">${ts}</span><span class="${cls}">${msg}</span>`;box.appendChild(li);box.scrollTop=box.scrollHeight;}
+function clearLog(){document.getElementById('log-box').innerHTML='';addLog('ls','已清空');}
+let nt=null;
+function notify(text,type='ok'){const el=document.getElementById('notif');document.getElementById('notif-ic').textContent={ok:'✓',err:'✕',warn:'!',info:'i'}[type]||'i';document.getElementById('notif-txt').textContent=text;el.className=`notif show ${type}`;clearTimeout(nt);nt=setTimeout(()=>el.classList.remove('show'),3200);}
+
+initMap();
+document.getElementById('tab-build').style.cssText='display:flex;flex-direction:column';
+</script>
+</body>
+</html>

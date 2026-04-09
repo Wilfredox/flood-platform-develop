@@ -1,0 +1,16 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: auth-service
+
+# --- Demo 阶段说明 ---
+# Phase-2 将增加:
+#   - Spring Security + JWT Filter
+#   - PostgreSQL 用户表
+#   - Redis session 管理
+
+logging:
+  level:
+    com.flood: DEBUG

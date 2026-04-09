@@ -1,0 +1,19 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: optimization-service
+
+# --- Demo 阶段说明 ---
+# Phase-2 将增加:
+#   - 代理转发至 Python FastAPI (localhost:9001)
+#   - PostgreSQL 方案存储
+
+logging:
+  level:
+    com.flood: DEBUG
+
+services:
+  python:
+    optimization-api-base-url: http://localhost:9001

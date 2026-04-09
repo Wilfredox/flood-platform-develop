@@ -1,0 +1,16 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: alert-engine-service
+
+# --- Demo 阶段说明 ---
+# Phase-2 将增加:
+#   - WebSocket STOMP /ws/alert 推送
+#   - Kafka consumer 监听 sensor-clean-topic
+#   - Redis 缓存告警规则
+
+logging:
+  level:
+    com.flood: DEBUG
