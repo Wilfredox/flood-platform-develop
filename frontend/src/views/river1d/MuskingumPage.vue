@@ -11,6 +11,14 @@ type MuskingumCalibration = {
   thresholds: number[]
   weights: { A: number; B: number }
   params: Array<{ k_hours: number; x: number }>
+  routing_mode?: 'single_reach' | 'multi_reach'
+  thresholds_a?: number[]
+  thresholds_b?: number[]
+  params_a?: Array<{ k_hours: number; x: number }>
+  params_b?: Array<{ k_hours: number; x: number }>
+  total_gain?: number
+  baseflow?: number
+  bias?: number
 }
 
 type MuskingumSeries = {
@@ -31,6 +39,7 @@ type CalibrationResponse = {
   calibration: MuskingumCalibration
   metrics: Record<string, number>
   series: MuskingumSeries
+  full_series: MuskingumSeries
 }
 
 type ForecastResponse = {
@@ -40,6 +49,7 @@ type ForecastResponse = {
   used_steps: number
   metrics: Record<string, number>
   series: MuskingumSeries
+  full_series: MuskingumSeries
 }
 
 const router = useRouter()
@@ -52,6 +62,7 @@ const form = ref({
   dt_minutes: 60,
   train_ratio: 0.7,
   segments: 3,
+  routing_mode: 'multi_reach' as 'single_reach' | 'multi_reach',
   iterations: 3500,
   forecast_steps: 72,
 })
@@ -62,15 +73,18 @@ const calibrationResult = ref<CalibrationResponse | null>(null)
 const forecastResult = ref<ForecastResponse | null>(null)
 const errorText = ref('')
 
-const chartRef = ref<HTMLElement | null>(null)
-let chart: echarts.ECharts | null = null
+const fullChartRef = ref<HTMLElement | null>(null)
+const tailChartRef = ref<HTMLElement | null>(null)
+let fullChart: echarts.ECharts | null = null
+let tailChart: echarts.ECharts | null = null
 
 const segmentRows = computed(() => {
   const c = calibrationResult.value?.calibration
   if (!c) return []
-  return c.params.map((p, idx) => {
+  const params = c.params ?? []
+  return params.map((p, idx) => {
     const low = idx === 0 ? '-inf' : c.thresholds[idx - 1].toFixed(2)
-    const high = idx === c.params.length - 1 ? '+inf' : c.thresholds[idx].toFixed(2)
+    const high = idx === params.length - 1 ? '+inf' : c.thresholds[idx].toFixed(2)
     return {
       segment: idx + 1,
       inflowRange: `[${low}, ${high}]`,
@@ -79,6 +93,38 @@ const segmentRows = computed(() => {
     }
   })
 })
+
+const segmentRowsA = computed(() => {
+  const c = calibrationResult.value?.calibration
+  if (!c?.thresholds_a || !c?.params_a) return []
+  return c.params_a.map((p, idx) => {
+    const low = idx === 0 ? '-inf' : c.thresholds_a![idx - 1].toFixed(2)
+    const high = idx === c.params_a!.length - 1 ? '+inf' : c.thresholds_a![idx].toFixed(2)
+    return {
+      segment: idx + 1,
+      inflowRange: `[${low}, ${high}]`,
+      kHours: p.k_hours,
+      x: p.x,
+    }
+  })
+})
+
+const segmentRowsB = computed(() => {
+  const c = calibrationResult.value?.calibration
+  if (!c?.thresholds_b || !c?.params_b) return []
+  return c.params_b.map((p, idx) => {
+    const low = idx === 0 ? '-inf' : c.thresholds_b![idx - 1].toFixed(2)
+    const high = idx === c.params_b!.length - 1 ? '+inf' : c.thresholds_b![idx].toFixed(2)
+    return {
+      segment: idx + 1,
+      inflowRange: `[${low}, ${high}]`,
+      kHours: p.k_hours,
+      x: p.x,
+    }
+  })
+})
+
+const isMultiReach = computed(() => calibrationResult.value?.calibration?.routing_mode === 'multi_reach')
 
 const calibrationMetricCards = computed(() => {
   const m = calibrationResult.value?.metrics
@@ -102,21 +148,50 @@ const forecastMetricCards = computed(() => {
   ]
 })
 
+const qualityAssessment = computed(() => {
+  const m = calibrationResult.value?.metrics
+  if (!m) return { level: 'info', text: '尚未完成率定，暂无质量评估。' }
+
+  const testNse = Number(m.test_nse ?? Number.NaN)
+  const testMape = Number(m.test_mape ?? Number.NaN)
+  const c = calibrationResult.value?.calibration
+  const bias = Math.abs(Number(c?.bias ?? 0))
+
+  if (Number.isFinite(testNse) && testNse < 0) {
+    return {
+      level: 'danger',
+      text: `当前率定不合理：测试NSE=${testNse.toFixed(4)} < 0，泛化失败。建议提高迭代次数、降低分段复杂度或调整样本切分。`
+    }
+  }
+  if (Number.isFinite(testNse) && testNse < 0.5) {
+    return {
+      level: 'warn',
+      text: `当前率定一般：测试NSE=${testNse.toFixed(4)}，可用性有限。建议继续调参。`
+    }
+  }
+  if ((Number.isFinite(testMape) && testMape > 30) || bias > 400) {
+    return {
+      level: 'warn',
+      text: `当前率定偏置较大（MAPE=${testMape.toFixed(2)}%, |bias|=${bias.toFixed(2)}），建议收紧偏置或重采样。`
+    }
+  }
+  return { level: 'good', text: `当前率定较合理：测试NSE=${testNse.toFixed(4)}。` }
+})
+
 function initChart() {
-  if (!chartRef.value) return
-  chart = echarts.init(chartRef.value)
-  renderChart()
+  if (fullChartRef.value) {
+    fullChart = echarts.init(fullChartRef.value)
+  }
+  if (tailChartRef.value) {
+    tailChart = echarts.init(tailChartRef.value)
+  }
+  renderCharts()
 }
 
-function renderChart() {
-  if (!chart) return
-
-  const baseSeries = calibrationResult.value?.series
-  const useForecast = forecastResult.value?.series
-
-  const source = useForecast ?? baseSeries
+function renderOneChart(target: echarts.ECharts | null, source: MuskingumSeries | undefined, simLabel: string, title: string) {
+  if (!target) return
   if (!source || !source.time || source.time.length === 0) {
-    chart.setOption({ title: { text: '暂无时序结果' } })
+    target.setOption({ title: { text: '暂无时序结果' } })
     return
   }
 
@@ -124,16 +199,22 @@ function renderChart() {
   const sim = source.C_forecast ?? source.C_sim ?? []
   const time = source.time.map((t) => t.replace('T', ' ').slice(0, 16))
 
-  chart.setOption({
+  target.setOption({
     backgroundColor: '#0f1a29',
     animation: true,
+    title: {
+      text: title,
+      left: 10,
+      top: 8,
+      textStyle: { color: '#dbeafe', fontSize: 13, fontWeight: 600 },
+    },
     tooltip: { trigger: 'axis' },
     legend: {
       top: 10,
       textStyle: { color: '#dbeafe' },
-      data: ['下游观测 C', useForecast ? '下游预报 C' : '下游模拟 C'],
+      data: ['下游观测 C', simLabel],
     },
-    grid: { left: 60, right: 30, top: 45, bottom: 40 },
+    grid: { left: 60, right: 30, top: 45, bottom: 30 },
     xAxis: {
       type: 'category',
       data: time,
@@ -157,7 +238,7 @@ function renderChart() {
         data: obs,
       },
       {
-        name: useForecast ? '下游预报 C' : '下游模拟 C',
+        name: simLabel,
         type: 'line',
         smooth: true,
         showSymbol: false,
@@ -166,6 +247,25 @@ function renderChart() {
       },
     ],
   })
+}
+
+function renderCharts() {
+  const fullSource = forecastResult.value?.full_series ?? calibrationResult.value?.full_series
+  const tailSource = forecastResult.value?.series ?? calibrationResult.value?.series
+
+  renderOneChart(
+    fullChart,
+    fullSource,
+    forecastResult.value ? '全时段模拟/预报 C' : '全时段模拟 C',
+    '完整过程线'
+  )
+
+  renderOneChart(
+    tailChart,
+    tailSource,
+    forecastResult.value ? '末段预报 C' : '末段模拟 C',
+    '末段窗口（预报）'
+  )
 }
 
 async function calibrateParams() {
@@ -185,6 +285,7 @@ async function calibrateParams() {
         dt_minutes: form.value.dt_minutes,
         train_ratio: form.value.train_ratio,
         segments: form.value.segments,
+        routing_mode: form.value.routing_mode,
         iterations: form.value.iterations,
       }),
     })
@@ -197,7 +298,7 @@ async function calibrateParams() {
     calibrationResult.value = data
     ElMessage.success('分段马斯金根参数率定完成')
     await nextTick()
-    renderChart()
+    renderCharts()
   } catch (err) {
     errorText.value = err instanceof Error ? err.message : '率定失败'
     ElMessage.error(errorText.value)
@@ -237,7 +338,7 @@ async function runForecast() {
     forecastResult.value = (await resp.json()) as ForecastResponse
     ElMessage.success('流量预报完成')
     await nextTick()
-    renderChart()
+    renderCharts()
   } catch (err) {
     errorText.value = err instanceof Error ? err.message : '预报失败'
     ElMessage.error(errorText.value)
@@ -253,7 +354,7 @@ function goBack() {
 watch(
   () => [calibrationResult.value, forecastResult.value],
   () => {
-    renderChart()
+    renderCharts()
   }
 )
 
@@ -264,14 +365,15 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
-  if (chart) {
-    chart.dispose()
-    chart = null
-  }
+  fullChart?.dispose()
+  tailChart?.dispose()
+  fullChart = null
+  tailChart = null
 })
 
 function handleResize() {
-  chart?.resize()
+  fullChart?.resize()
+  tailChart?.resize()
 }
 </script>
 
@@ -314,6 +416,13 @@ function handleResize() {
         <input v-model.number="form.segments" type="number" min="2" max="6" class="input" />
       </div>
       <div class="fg">
+        <label>演进模式</label>
+        <select v-model="form.routing_mode" class="input">
+          <option value="multi_reach">multi_reach（双支路）</option>
+          <option value="single_reach">single_reach（单河段）</option>
+        </select>
+      </div>
+      <div class="fg">
         <label>优化迭代数</label>
         <input v-model.number="form.iterations" type="number" min="200" step="100" class="input" />
       </div>
@@ -339,13 +448,24 @@ function handleResize() {
       </div>
     </section>
 
+    <section class="panel quality-panel" v-if="calibrationResult?.calibration">
+      <div class="quality-title">率定质量判读</div>
+      <div :class="['quality-text', `quality-${qualityAssessment.level}`]">{{ qualityAssessment.text }}</div>
+    </section>
+
     <section class="panel" v-if="calibrationResult?.calibration">
       <h3>率定结果</h3>
+      <div class="mode-tag">
+        当前模式：{{ calibrationResult.calibration.routing_mode ?? 'single_reach' }}
+      </div>
       <div class="weights">
         <span>上游权重 A: {{ calibrationResult.calibration.weights.A.toFixed(4) }}</span>
         <span>上游权重 B: {{ calibrationResult.calibration.weights.B.toFixed(4) }}</span>
+        <span v-if="isMultiReach">total_gain: {{ Number(calibrationResult.calibration.total_gain ?? 1).toFixed(4) }}</span>
+        <span v-if="isMultiReach">baseflow: {{ Number(calibrationResult.calibration.baseflow ?? 0).toFixed(4) }}</span>
+        <span v-if="isMultiReach">bias: {{ Number(calibrationResult.calibration.bias ?? 0).toFixed(4) }}</span>
       </div>
-      <table class="param-table">
+      <table class="param-table" v-if="!isMultiReach">
         <thead>
           <tr>
             <th>分段</th>
@@ -363,11 +483,59 @@ function handleResize() {
           </tr>
         </tbody>
       </table>
+
+      <div class="branch-grid" v-else>
+        <div>
+          <h4>支路 A 参数</h4>
+          <table class="param-table">
+            <thead>
+              <tr>
+                <th>分段</th>
+                <th>流量区间</th>
+                <th>K (h)</th>
+                <th>x</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in segmentRowsA" :key="`A-${row.segment}`">
+                <td>{{ row.segment }}</td>
+                <td>{{ row.inflowRange }}</td>
+                <td>{{ row.kHours.toFixed(4) }}</td>
+                <td>{{ row.x.toFixed(4) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <h4>支路 B 参数</h4>
+          <table class="param-table">
+            <thead>
+              <tr>
+                <th>分段</th>
+                <th>流量区间</th>
+                <th>K (h)</th>
+                <th>x</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in segmentRowsB" :key="`B-${row.segment}`">
+                <td>{{ row.segment }}</td>
+                <td>{{ row.inflowRange }}</td>
+                <td>{{ row.kHours.toFixed(4) }}</td>
+                <td>{{ row.x.toFixed(4) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <section class="panel chart-panel">
       <h3>下游 C 过程线对比</h3>
-      <div ref="chartRef" class="chart"></div>
+      <div ref="fullChartRef" class="chart"></div>
+      <div class="chart-gap"></div>
+      <div ref="tailChartRef" class="chart chart-tail"></div>
     </section>
   </div>
 </template>
@@ -439,6 +607,11 @@ function handleResize() {
   padding: 0 10px;
 }
 
+.input option {
+  background: #0f2437;
+  color: #e8f0fe;
+}
+
 .error-box {
   border-color: #7f1d1d;
   background: rgba(127, 29, 29, 0.2);
@@ -476,12 +649,79 @@ function handleResize() {
   color: #e8f0fe;
 }
 
+.quality-panel {
+  margin-top: -2px;
+}
+
+.quality-title {
+  font-size: 13px;
+  color: #9fb3c8;
+  margin-bottom: 6px;
+}
+
+.quality-text {
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+
+.quality-good {
+  color: #bbf7d0;
+  background: rgba(6, 78, 59, 0.35);
+  border-color: #14532d;
+}
+
+.quality-warn {
+  color: #fde68a;
+  background: rgba(120, 53, 15, 0.28);
+  border-color: #854d0e;
+}
+
+.quality-danger {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.28);
+  border-color: #991b1b;
+}
+
+.quality-info {
+  color: #bfdbfe;
+  background: rgba(30, 58, 138, 0.25);
+  border-color: #1d4ed8;
+}
+
 .weights {
   display: flex;
+  flex-wrap: wrap;
   gap: 20px;
   margin: 8px 0 12px;
   color: #b6d4f2;
   font-size: 13px;
+}
+
+.mode-tag {
+  display: inline-block;
+  margin-top: 4px;
+  margin-bottom: 8px;
+  border: 1px solid #365676;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #9ac3eb;
+  background: rgba(19, 48, 74, 0.8);
+}
+
+.branch-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+}
+
+.branch-grid h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #9ac3eb;
 }
 
 .param-table {
@@ -511,6 +751,14 @@ function handleResize() {
   height: 360px;
 }
 
+.chart-tail {
+  height: 300px;
+}
+
+.chart-gap {
+  height: 12px;
+}
+
 @media (max-width: 1200px) {
   .form-grid {
     grid-template-columns: repeat(2, minmax(180px, 1fr));
@@ -529,6 +777,10 @@ function handleResize() {
 
 @media (max-width: 700px) {
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .branch-grid {
     grid-template-columns: 1fr;
   }
 

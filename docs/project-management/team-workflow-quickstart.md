@@ -97,6 +97,7 @@
 ## 9. 配套文档索引
 
 - 分支策略：`docs/project-management/git-branch-strategy.md`
+- 工具链锁版：`docs/project-management/toolchain-lock.md`
 - 协作规范：`docs/flood_platform_prompt_system.md`
 - 模块自检：`docs/project-management/module-checklist-template.md`
 - 开发记录：`docs/project-management/dev-log.md`

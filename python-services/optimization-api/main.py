@@ -79,6 +79,14 @@ class MuskingumCalibrationSnapshot(BaseModel):
     thresholds: List[float]
     weights: Dict[str, float]
     params: List[MuskingumSegmentParam]
+    routing_mode: str = "single_reach"
+    thresholds_a: List[float] | None = None
+    thresholds_b: List[float] | None = None
+    params_a: List[MuskingumSegmentParam] | None = None
+    params_b: List[MuskingumSegmentParam] | None = None
+    total_gain: float = 1.0
+    baseflow: float = 0.0
+    bias: float = 0.0
 
 
 class MuskingumCalibrateRequest(BaseModel):
@@ -86,6 +94,7 @@ class MuskingumCalibrateRequest(BaseModel):
     dt_minutes: int = 60
     train_ratio: float = 0.7
     segments: int = 3
+    routing_mode: str = "multi_reach"
     iterations: int = 3500
     seed: int = 42
     include_series_points: int = 240
@@ -100,6 +109,7 @@ class MuskingumCalibrateResponse(BaseModel):
     calibration: MuskingumCalibrationSnapshot
     metrics: Dict[str, float]
     series: Dict[str, List[float | str]]
+    full_series: Dict[str, List[float | str]]
 
 
 class MuskingumForecastRequest(BaseModel):
@@ -117,6 +127,7 @@ class MuskingumForecastResponse(BaseModel):
     used_steps: int
     metrics: Dict[str, float]
     series: Dict[str, List[float | str]]
+    full_series: Dict[str, List[float | str]]
 
 
 LAST_CALIBRATION: MuskingumCalibrationSnapshot | None = None
@@ -331,6 +342,189 @@ def _optimize_segmented(
     return best_weights, thresholds, best_params, best_sim
 
 
+def _simulate_multi_reach(
+    inflow_a: np.ndarray,
+    inflow_b: np.ndarray,
+    observed: np.ndarray,
+    thresholds_a: List[float],
+    thresholds_b: List[float],
+    params_a: List[Tuple[float, float]],
+    params_b: List[Tuple[float, float]],
+    dt_hours: float,
+    weight_a: float,
+    weight_b: float,
+    total_gain: float,
+    baseflow: float,
+    bias: float,
+) -> np.ndarray:
+    out_a = _simulate_segmented(inflow_a, observed, thresholds_a, params_a, dt_hours)
+    out_b = _simulate_segmented(inflow_b, observed, thresholds_b, params_b, dt_hours)
+
+    n = len(inflow_a)
+    t_arr = np.arange(n, dtype=float)
+    trend = bias * (t_arr / max(1.0, float(n - 1)))
+    sim = total_gain * (weight_a * out_a + weight_b * out_b) + baseflow + trend
+    return np.maximum(sim, 0.0)
+
+
+def _optimize_multi_reach(
+    inflow_a_train: np.ndarray,
+    inflow_b_train: np.ndarray,
+    obs_train: np.ndarray,
+    dt_hours: float,
+    segments: int,
+    iterations: int,
+    seed: int,
+) -> tuple[Dict[str, float], float, List[float], List[float], List[Tuple[float, float]], List[Tuple[float, float]], float, float, np.ndarray]:
+    rng = np.random.default_rng(seed)
+    quantiles = [i / segments for i in range(1, segments)]
+    thresholds_a = [float(np.quantile(inflow_a_train, q)) for q in quantiles]
+    thresholds_b = [float(np.quantile(inflow_b_train, q)) for q in quantiles]
+
+    k_min = max(dt_hours * 0.6, 0.2)
+    k_max = 72.0
+
+    obs_q10 = float(np.quantile(obs_train, 0.10))
+    obs_q90 = float(np.quantile(obs_train, 0.90))
+    obs_std = float(np.std(obs_train)) + 1e-6
+    baseflow_max = max(5.0, obs_q10 * 0.5)
+    bias_abs = max(5.0, (obs_q90 - obs_q10) * 0.25)
+
+    def decode(vec: np.ndarray) -> tuple[Dict[str, float], float, List[Tuple[float, float]], List[Tuple[float, float]], float, float]:
+        wa_raw = float(np.clip(vec[0], 0.05, 1.0))
+        wb_raw = float(np.clip(vec[1], 0.05, 1.0))
+        total = wa_raw + wb_raw
+        weights = {"A": wa_raw / total, "B": wb_raw / total}
+        total_gain = float(np.clip(vec[2], 0.6, 1.6))
+
+        params_a: List[Tuple[float, float]] = []
+        params_b: List[Tuple[float, float]] = []
+
+        cursor = 3
+        for _ in range(segments):
+            ka = float(np.clip(vec[cursor], k_min, k_max))
+            xa = float(np.clip(vec[cursor + 1], 0.0, 0.49))
+            params_a.append((ka, xa))
+            cursor += 2
+
+        for _ in range(segments):
+            kb = float(np.clip(vec[cursor], k_min, k_max))
+            xb = float(np.clip(vec[cursor + 1], 0.0, 0.49))
+            params_b.append((kb, xb))
+            cursor += 2
+
+        baseflow = float(np.clip(vec[cursor], 0.0, baseflow_max))
+        bias = float(np.clip(vec[cursor + 1], -bias_abs, bias_abs))
+        return weights, total_gain, params_a, params_b, baseflow, bias
+
+    def objective(vec: np.ndarray) -> tuple[float, np.ndarray, Dict[str, float], float, List[Tuple[float, float]], List[Tuple[float, float]], float, float]:
+        try:
+            weights, total_gain, params_a, params_b, baseflow, bias = decode(vec)
+            sim = _simulate_multi_reach(
+                inflow_a_train,
+                inflow_b_train,
+                obs_train,
+                thresholds_a,
+                thresholds_b,
+                params_a,
+                params_b,
+                dt_hours,
+                weights["A"],
+                weights["B"],
+                total_gain,
+                baseflow,
+                bias,
+            )
+
+            split_idx = max(30, int(len(obs_train) * 0.8))
+            split_idx = min(split_idx, len(obs_train) - 10)
+            obs_fit = obs_train[:split_idx]
+            sim_fit = sim[:split_idx]
+            obs_val = obs_train[split_idx:]
+            sim_val = sim[split_idx:]
+
+            rough_obs = np.mean(np.abs(np.diff(obs_train))) + 1e-6
+            rough_sim = np.mean(np.abs(np.diff(sim)))
+            rough_penalty = max(0.0, rough_sim - rough_obs) * 0.03
+            rmse_fit = float(np.sqrt(np.mean((obs_fit - sim_fit) ** 2)))
+            rmse_val = float(np.sqrt(np.mean((obs_val - sim_val) ** 2)))
+            gap_penalty = max(0.0, rmse_val - rmse_fit) * 0.2
+            bias_penalty = (abs(bias) / obs_std) * 0.03
+            gain_penalty = abs(total_gain - 1.0) * 2.0
+
+            score = (0.65 * rmse_fit) + (0.35 * rmse_val) + rough_penalty + gap_penalty + bias_penalty + gain_penalty
+            return score, sim, weights, total_gain, params_a, params_b, baseflow, bias
+        except Exception:
+            fallback = [(k_min, 0.2)] * segments
+            return 1e12, np.zeros_like(obs_train), {"A": 0.5, "B": 0.5}, 1.0, fallback, fallback, 0.0, 0.0
+
+    dim = 4 * segments + 5
+    best_vec = None
+    best_score = 1e15
+    best_sim = None
+    best_weights = {"A": 0.5, "B": 0.5}
+    best_total_gain = 1.0
+    best_params_a = None
+    best_params_b = None
+    best_baseflow = 0.0
+    best_bias = 0.0
+
+    global_steps = max(240, int(iterations * 0.75))
+    local_steps = max(80, iterations - global_steps)
+
+    for _ in range(global_steps):
+        vec = np.zeros(dim, dtype=float)
+        vec[0] = rng.uniform(0.05, 0.95)
+        vec[1] = rng.uniform(0.05, 0.95)
+        vec[2] = rng.uniform(0.7, 1.4)
+
+        cursor = 3
+        for _ in range(segments):
+            vec[cursor] = rng.uniform(k_min, k_max)
+            vec[cursor + 1] = rng.uniform(0.0, 0.49)
+            cursor += 2
+        for _ in range(segments):
+            vec[cursor] = rng.uniform(k_min, k_max)
+            vec[cursor + 1] = rng.uniform(0.0, 0.49)
+            cursor += 2
+        vec[cursor] = rng.uniform(0.0, baseflow_max)
+        vec[cursor + 1] = rng.uniform(-bias_abs, bias_abs)
+
+        score, sim, weights, total_gain, params_a, params_b, baseflow, bias = objective(vec)
+        if score < best_score:
+            best_score = score
+            best_vec = vec
+            best_sim = sim
+            best_weights = weights
+            best_total_gain = total_gain
+            best_params_a = params_a
+            best_params_b = params_b
+            best_baseflow = baseflow
+            best_bias = bias
+
+    if best_vec is None:
+        raise HTTPException(status_code=500, detail="率定失败，未找到有效参数")
+
+    scales = np.array([0.08, 0.08, 0.12] + [6.0, 0.06] * (2 * segments) + [max(2.0, baseflow_max * 0.12), max(1.0, bias_abs * 0.1)])
+    for _ in range(local_steps):
+        noise = rng.normal(0.0, 1.0, size=dim)
+        cand = best_vec + noise * scales
+        score, sim, weights, total_gain, params_a, params_b, baseflow, bias = objective(cand)
+        if score < best_score:
+            best_score = score
+            best_vec = cand
+            best_sim = sim
+            best_weights = weights
+            best_total_gain = total_gain
+            best_params_a = params_a
+            best_params_b = params_b
+            best_baseflow = baseflow
+            best_bias = bias
+            scales = np.maximum(scales * 0.98, 1e-3)
+
+    return best_weights, best_total_gain, thresholds_a, thresholds_b, best_params_a, best_params_b, best_baseflow, best_bias, best_sim
+
+
 # ---------- 路由 ----------
 
 @app.post("/optimize/run", response_model=OptimizeResponse)
@@ -381,6 +575,8 @@ async def calibrate_muskingum(req: MuskingumCalibrateRequest):
         raise HTTPException(status_code=400, detail="iterations 至少为 200")
     if req.train_ratio <= 0.5 or req.train_ratio >= 0.95:
         raise HTTPException(status_code=400, detail="train_ratio 建议在 (0.5, 0.95)")
+    if req.routing_mode not in {"single_reach", "multi_reach"}:
+        raise HTTPException(status_code=400, detail="routing_mode 仅支持 single_reach 或 multi_reach")
 
     aligned = _prepare_aligned_data(req.dataset, req.dt_minutes)
     sample_count = len(aligned)
@@ -395,17 +591,55 @@ async def calibrate_muskingum(req: MuskingumCalibrateRequest):
     inflow_train = inflow_all[:train_count]
     outflow_train = outflow_all[:train_count]
 
-    weights, thresholds, params, sim_train = _optimize_segmented(
-        inflow_train,
-        outflow_train,
-        dt_hours,
-        req.segments,
-        req.iterations,
-        req.seed,
-    )
+    weights = {"A": 0.5, "B": 0.5}
+    thresholds: List[float] = []
+    params: List[Tuple[float, float]] = []
+    thresholds_a: List[float] | None = None
+    thresholds_b: List[float] | None = None
+    params_a: List[Tuple[float, float]] | None = None
+    params_b: List[Tuple[float, float]] | None = None
+    baseflow = 0.0
+    bias = 0.0
 
-    inflow_mix_all = weights["A"] * inflow_all[:, 0] + weights["B"] * inflow_all[:, 1]
-    sim_all = _simulate_segmented(inflow_mix_all, outflow_all, thresholds, params, dt_hours)
+    if req.routing_mode == "single_reach":
+        weights, thresholds, params, _ = _optimize_segmented(
+            inflow_train,
+            outflow_train,
+            dt_hours,
+            req.segments,
+            req.iterations,
+            req.seed,
+        )
+        inflow_mix_all = weights["A"] * inflow_all[:, 0] + weights["B"] * inflow_all[:, 1]
+        sim_all = _simulate_segmented(inflow_mix_all, outflow_all, thresholds, params, dt_hours)
+    else:
+        weights, total_gain, thresholds_a, thresholds_b, params_a, params_b, baseflow, bias, _ = _optimize_multi_reach(
+            inflow_train[:, 0],
+            inflow_train[:, 1],
+            outflow_train,
+            dt_hours,
+            req.segments,
+            req.iterations,
+            req.seed,
+        )
+        sim_all = _simulate_multi_reach(
+            inflow_all[:, 0],
+            inflow_all[:, 1],
+            outflow_all,
+            thresholds_a,
+            thresholds_b,
+            params_a,
+            params_b,
+            dt_hours,
+            weights["A"],
+            weights["B"],
+            total_gain,
+            baseflow,
+            bias,
+        )
+        # 为兼容既有前端表格，保留一组可展示段参数（A 支路）
+        thresholds = thresholds_a
+        params = params_a
 
     obs_train = outflow_all[:train_count]
     pred_train = sim_all[:train_count]
@@ -422,6 +656,14 @@ async def calibrate_muskingum(req: MuskingumCalibrateRequest):
         thresholds=[round(v, 4) for v in thresholds],
         weights={"A": round(weights["A"], 6), "B": round(weights["B"], 6)},
         params=[MuskingumSegmentParam(k_hours=round(k, 6), x=round(x, 6)) for k, x in params],
+        routing_mode=req.routing_mode,
+        thresholds_a=[round(v, 4) for v in thresholds_a] if thresholds_a is not None else None,
+        thresholds_b=[round(v, 4) for v in thresholds_b] if thresholds_b is not None else None,
+        params_a=[MuskingumSegmentParam(k_hours=round(k, 6), x=round(x, 6)) for k, x in params_a] if params_a is not None else None,
+        params_b=[MuskingumSegmentParam(k_hours=round(k, 6), x=round(x, 6)) for k, x in params_b] if params_b is not None else None,
+        total_gain=round(total_gain, 6) if req.routing_mode == "multi_reach" else 1.0,
+        baseflow=round(baseflow, 6),
+        bias=round(bias, 6),
     )
     LAST_CALIBRATION = calibration
 
@@ -431,7 +673,7 @@ async def calibrate_muskingum(req: MuskingumCalibrateRequest):
 
     return MuskingumCalibrateResponse(
         success=True,
-        algorithm="Segmented Muskingum + Random Search",
+        algorithm=f"Segmented Muskingum ({req.routing_mode}) + Random Search",
         sample_count=sample_count,
         train_count=train_count,
         test_count=sample_count - train_count,
@@ -449,6 +691,13 @@ async def calibrate_muskingum(req: MuskingumCalibrateRequest):
             "B": [round(float(v), 4) for v in tail["B"].tolist()],
             "C_obs": [round(float(v), 4) for v in tail["C"].tolist()],
             "C_sim": [round(float(v), 4) for v in tail_sim.tolist()],
+        },
+        full_series={
+            "time": [t.isoformat() for t in aligned.index.to_pydatetime()],
+            "A": [round(float(v), 4) for v in aligned["A"].tolist()],
+            "B": [round(float(v), 4) for v in aligned["B"].tolist()],
+            "C_obs": [round(float(v), 4) for v in aligned["C"].tolist()],
+            "C_sim": [round(float(v), 4) for v in sim_all.tolist()],
         },
     )
 
@@ -473,8 +722,29 @@ async def forecast_muskingum(req: MuskingumForecastRequest):
         raise HTTPException(status_code=400, detail="calibration 参数段数与配置不一致")
 
     dt_hours = dt_minutes / 60.0
-    inflow_mix = weights["A"] * inflow_all[:, 0] + weights["B"] * inflow_all[:, 1]
-    sim_all = _simulate_segmented(inflow_mix, outflow_all, calibration.thresholds, params, dt_hours)
+    if calibration.routing_mode == "multi_reach":
+        if not calibration.thresholds_a or not calibration.thresholds_b or not calibration.params_a or not calibration.params_b:
+            raise HTTPException(status_code=400, detail="multi_reach 缺少支路参数，请重新率定")
+        params_a = [(p.k_hours, p.x) for p in calibration.params_a]
+        params_b = [(p.k_hours, p.x) for p in calibration.params_b]
+        sim_all = _simulate_multi_reach(
+            inflow_all[:, 0],
+            inflow_all[:, 1],
+            outflow_all,
+            calibration.thresholds_a,
+            calibration.thresholds_b,
+            params_a,
+            params_b,
+            dt_hours,
+            calibration.weights["A"],
+            calibration.weights["B"],
+            calibration.total_gain,
+            calibration.baseflow,
+            calibration.bias,
+        )
+    else:
+        inflow_mix = weights["A"] * inflow_all[:, 0] + weights["B"] * inflow_all[:, 1]
+        sim_all = _simulate_segmented(inflow_mix, outflow_all, calibration.thresholds, params, dt_hours)
 
     steps = max(12, min(req.forecast_steps, len(aligned)))
     tail = aligned.iloc[-steps:]
@@ -483,7 +753,7 @@ async def forecast_muskingum(req: MuskingumForecastRequest):
 
     return MuskingumForecastResponse(
         success=True,
-        model="Segmented Muskingum",
+        model=f"Segmented Muskingum ({calibration.routing_mode})",
         dt_minutes=dt_minutes,
         used_steps=steps,
         metrics={
@@ -497,6 +767,13 @@ async def forecast_muskingum(req: MuskingumForecastRequest):
             "B": [round(float(v), 4) for v in tail["B"].tolist()],
             "C_obs": [round(float(v), 4) for v in tail["C"].tolist()],
             "C_forecast": [round(float(v), 4) for v in tail_sim.tolist()],
+        },
+        full_series={
+            "time": [t.isoformat() for t in aligned.index.to_pydatetime()],
+            "A": [round(float(v), 4) for v in aligned["A"].tolist()],
+            "B": [round(float(v), 4) for v in aligned["B"].tolist()],
+            "C_obs": [round(float(v), 4) for v in aligned["C"].tolist()],
+            "C_forecast": [round(float(v), 4) for v in sim_all.tolist()],
         },
     )
 

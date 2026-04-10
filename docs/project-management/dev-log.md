@@ -404,3 +404,34 @@
 
 - River1D 进入页面即可看到目标区域，坐标栏同时提供投影 XY 与经纬度（度分秒）信息。  
 - 大屏首页默认可完整展示浙江省边界，不再默认过度放大到局部。
+
+---
+
+### Session #014 · 2026-04-10
+
+**阶段：** Muskingum 模块增强与工具链锁版落地  
+**操作者：** AI Agent (GitHub Copilot)  
+**时长：** 算法改造 + 前端可视化 + 构建环境治理
+
+#### 本次完成内容
+
+| # | 内容 | 状态 | 产出文件 |
+|---|------|------|---------|
+| 1 | Muskingum 支持 `single_reach/multi_reach` 双模式，新增 `full_series` 返回用于完整过程线 | ✅ | `python-services/optimization-api/main.py`, `docs/api/muskingum-model-contract.md` |
+| 2 | 前端 Muskingum 页面改为双图展示（完整过程 + 末段预报窗口），并增加率定质量判读提示 | ✅ | `frontend/src/views/river1d/MuskingumPage.vue` |
+| 3 | 工具链版本规范落地，固定 Node/Python/Java/Maven 口径并接入文档索引 | ✅ | `docs/project-management/toolchain-lock.md`, `README.md`, `docs/project-management/team-workflow-quickstart.md` |
+| 4 | 修复前端构建阻塞项（TypeScript 配置与路径映射）并完成构建验证 | ✅ | `frontend/tsconfig.json`, `frontend/package.json`, `frontend/.nvmrc` |
+
+#### 关键验证结论
+
+- 运行链路稳定：`frontend:3000`、`optimization-service:8084`、`optimization-api:9001` 可联调。
+- Muskingum 当前可同时查看完整过程线与末段预报窗口，问题定位效率提升。
+- 指标层面仍存在“训练好、测试差”的泛化风险，测试 NSE 在部分参数组合下仍可能为负，需继续优化时滞/样本切分策略。
+
+#### 后续计划
+
+| 方向 | 目标 |
+|------|------|
+| 参数稳健性 | 引入支路时滞参数与更强泛化约束，抑制大偏置解 |
+| 评估策略 | 增加事件级切分与分层验证，避免纯时间切分导致工况偏移 |
+| 体验完善 | 增加参数对比面板（single vs multi）与一键推荐配置 |

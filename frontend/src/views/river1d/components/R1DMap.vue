@@ -143,15 +143,17 @@ function selectNearestFeature(lat: number, lng: number) {
   if (!map || !L) return
   const clickPt = map.latLngToLayerPoint(L.latLng(lat, lng))
   const tolerancePx = 10
-  let best: { d: number; feature: River | Bank | CrossSection | Structure } | null = null
+  let bestDistance = Number.POSITIVE_INFINITY
+  let bestFeature: River | Bank | CrossSection | Structure | null = null
 
   const tryLineFeature = (coords: LatLng[], feature: River | Bank | CrossSection | Structure) => {
     for (let i = 1; i < coords.length; i++) {
       const a = map.latLngToLayerPoint(L.latLng(coords[i - 1].lat, coords[i - 1].lng))
       const b = map.latLngToLayerPoint(L.latLng(coords[i].lat, coords[i].lng))
       const d = distPointToSegmentPx(clickPt.x, clickPt.y, a.x, a.y, b.x, b.y)
-      if (d <= tolerancePx && (!best || d < best.d)) {
-        best = { d, feature }
+      if (d <= tolerancePx && d < bestDistance) {
+        bestDistance = d
+        bestFeature = feature
       }
     }
   }
@@ -163,7 +165,7 @@ function selectNearestFeature(lat: number, lng: number) {
   store.sections.forEach((s) => tryLineFeature(s.coords, s))
   store.structures.forEach((s) => tryLineFeature(s.coords, s))
 
-  store.selectFeature(best ? best.feature : null)
+  store.selectFeature(bestFeature)
 }
 
 function getCentralMeridian(crs: string): number | null {

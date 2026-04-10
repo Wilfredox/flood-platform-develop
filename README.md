@@ -126,6 +126,7 @@ docker-compose -f docker-compose.middleware.yml up -d
 - [提示词系统文档](docs/flood_platform_prompt_system.md)
 - [项目路线图](docs/flood_platform_roadmap.md)
 - [Git 分支策略](docs/project-management/git-branch-strategy.md)
+- [工具链锁版规范](docs/project-management/toolchain-lock.md)
 - [技能矩阵](docs/project-management/skill-matrix.md)
 - [风格指南](docs/project-management/style-guide.md)
 - [开发日志](docs/project-management/dev-log.md)

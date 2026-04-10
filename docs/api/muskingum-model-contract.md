@@ -22,6 +22,7 @@
   "dt_minutes": 60,
   "train_ratio": 0.7,
   "segments": 3,
+  "routing_mode": "multi_reach",
   "iterations": 3500
 }
 ```
@@ -31,7 +32,7 @@
 ```json
 {
   "success": true,
-  "algorithm": "Segmented Muskingum + Random Search",
+  "algorithm": "Segmented Muskingum (multi_reach) + Random Search",
   "sample_count": 1200,
   "train_count": 840,
   "test_count": 360,
@@ -41,6 +42,22 @@
     "segments": 3,
     "thresholds": [1200.0, 2300.0],
     "weights": { "A": 0.46, "B": 0.54 },
+    "routing_mode": "multi_reach",
+    "thresholds_a": [1150.0, 2100.0],
+    "thresholds_b": [980.0, 1850.0],
+    "params_a": [
+      { "k_hours": 2.8, "x": 0.16 },
+      { "k_hours": 4.2, "x": 0.21 },
+      { "k_hours": 6.0, "x": 0.25 }
+    ],
+    "params_b": [
+      { "k_hours": 3.4, "x": 0.18 },
+      { "k_hours": 4.9, "x": 0.23 },
+      { "k_hours": 6.8, "x": 0.28 }
+    ],
+    "total_gain": 1.02,
+    "baseflow": 12.5,
+    "bias": 6.2,
     "params": [
       { "k_hours": 3.2, "x": 0.18 },
       { "k_hours": 4.8, "x": 0.22 },
@@ -60,6 +77,13 @@
     "B": [760.0],
     "C_obs": [1800.0],
     "C_sim": [1750.0]
+  },
+  "full_series": {
+    "time": ["2021-09-01T00:00:00"],
+    "A": [820.0],
+    "B": [710.0],
+    "C_obs": [1650.0],
+    "C_sim": [1605.0]
   }
 }
 ```
@@ -89,7 +113,7 @@
 ```json
 {
   "success": true,
-  "model": "Segmented Muskingum",
+  "model": "Segmented Muskingum (multi_reach)",
   "dt_minutes": 60,
   "used_steps": 72,
   "metrics": {
@@ -103,6 +127,13 @@
     "B": [650.0],
     "C_obs": [1410.0],
     "C_forecast": [1360.0]
+  },
+  "full_series": {
+    "time": ["2021-09-01T00:00:00"],
+    "A": [820.0],
+    "B": [710.0],
+    "C_obs": [1650.0],
+    "C_forecast": [1608.0]
   }
 }
 ```
@@ -111,18 +142,24 @@
 
 - `segments` 建议范围：`2 ~ 6`。
 - `train_ratio` 建议范围：`(0.5, 0.95)`。
+- `routing_mode`：
+  - `single_reach`：A/B 先按权重汇流，再单河段分段马斯金根演进（兼容模式）。
+  - `multi_reach`：A、B 两支路独立分段演进后再叠加 `baseflow+bias`（推荐模式）。
+- `total_gain`：`multi_reach` 下的总增益系数，用于约束整体量级漂移。
+- `series`：末段窗口数据（用于“末段预报曲线”）。
+- `full_series`：完整样本时段数据（用于“完整过程线”）。
 - 当前优化算法为随机搜索 + 局部搜索（Demo），后续可替换为 DE/PSO/贝叶斯优化。
 - 当前数据来源默认是 `dataset/maskingun/` 下三站 CSV。
 
-## 4. 已知逻辑问题（2026-04-09）
+## 4. 已知逻辑问题（2026-04-10）
 
-- 当前 Demo 拓扑假设为 `A/B 并联汇流 -> 单河段 -> C`，并通过固定权重将 A、B 合成为单一入流。
-- 该实现能够跑通端到端链路，但未显式建模 `A->汇流点` 与 `B->汇流点` 的独立传播时滞与河段参数差异。
-- 在复杂洪峰过程下，单入流简化会放大相位误差，可能导致 NSE 偏低或为负。
+- 已升级为 `multi_reach`（A/B 独立分段演进），但在部分样本切分下仍可能出现测试 NSE<0。
+- 当前随机搜索策略仍可能产生偏大的 `bias` 与边界化 `total_gain`，导致泛化不稳定。
+- 训练集与测试集工况差异较大时，存在明显过拟合风险。
 
 ### 修正方向（下一阶段）
 
 - 将单河段结构升级为两支路 + 主河道的多河段拓扑。
-- 为每条支路独立率定 Muskingum 参数（`K`, `x`），并加入支路汇流时滞参数。
+- 为每条支路独立率定 Muskingum 参数（`K`, `x`），并补充支路时滞参数率定。
 - 在汇流节点后再执行主河道演算，形成 `A 段 + B 段 + C 段` 的分层率定流程。
-- 新增分段策略开关：`single_reach`（兼容现状）与 `multi_reach`（增强模式）。
+- 保留分段策略开关：`single_reach`（兼容）与 `multi_reach`（增强）。
